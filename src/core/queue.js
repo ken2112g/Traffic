@@ -1,0 +1,141 @@
+﻿import { Queue, Worker } from 'bullmq';
+import IORedis from 'ioredis';
+import { randomUUID } from 'crypto';
+import { getDb } from '../db/schema.js';
+import { logger } from '../utils/logger.js';
+import 'dotenv/config';
+
+const REDIS_CONFIG = {
+  host: process.env.REDIS_HOST || '127.0.0.1',
+  port: parseInt(process.env.REDIS_PORT || '6379'),
+  password: process.env.REDIS_PASSWORD || undefined,
+  maxRetriesPerRequest: null,
+};
+
+const QUEUE_NAME = 'traffic-actions';
+
+let _connection = null;
+let _queue = null;
+
+export function getRedis() {
+  if (!_connection) {
+    _connection = new IORedis(REDIS_CONFIG);
+    _connection.on('error', (err) => logger.error('Redis', err.message));
+    _connection.on('connect', () => logger.info('Redis', 'Connected'));
+  }
+  return _connection;
+}
+
+export function getQueue() {
+  if (!_queue) {
+    _queue = new Queue(QUEUE_NAME, {
+      connection: getRedis(),
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 30000 },
+        removeOnComplete: { count: 200 },
+        removeOnFail: { count: 500 },
+      },
+    });
+  }
+  return _queue;
+}
+
+export async function enqueueTask({ taskId, campaignId, accountId, platform, action, targetUrl, delayMs = 0 }) {
+  const db = getDb();
+  const id = taskId || randomUUID();
+
+  if (!taskId) {
+    const scheduledAt = new Date(Date.now() + delayMs).toISOString();
+    db.prepare(`
+      INSERT INTO tasks (id, campaign_id, account_id, platform, action, target_url, status, scheduled_at)
+      VALUES (?, ?, ?, ?, ?, ?, "pending", ?)
+    `).run(id, campaignId || null, accountId, platform, action, targetUrl, scheduledAt);
+  }
+
+  const queue = getQueue();
+  await queue.add(
+    `${platform}:${action}`,
+    { taskId: id, accountId, platform, action, targetUrl },
+    { delay: delayMs, jobId: id }
+  );
+
+  logger.debug('Queue', `Enqueue [${platform}:${action}] account=${accountId} delay=${Math.round(delayMs / 1000)}s`);
+  return id;
+}
+
+export async function enqueueBatch(tasks, { delayMinMs = 5000, delayMaxMs = 30000 } = {}) {
+  let cumulativeDelay = 0;
+  const ids = [];
+  for (const task of tasks) {
+    const jitter = Math.floor(Math.random() * (delayMaxMs - delayMinMs) + delayMinMs);
+    cumulativeDelay += jitter;
+    const id = await enqueueTask({ ...task, delayMs: cumulativeDelay });
+    ids.push(id);
+  }
+  logger.info('Queue', `Enqueue batch ${tasks.length} tasks`);
+  return ids;
+}
+
+// platformWorkers: { pinterest: PinterestWorker, instagram: InstagramWorker, ... }
+// Pass CLASSES not instances -- a new instance is created per job so concurrent
+// jobs don't share this.page / this.browser state.
+
+export function startWorker(platformWorkers) {
+  const db = getDb();
+  const concurrency = parseInt(process.env.MAX_CONCURRENT_BROWSERS || '5');
+
+  const worker = new Worker(
+    QUEUE_NAME,
+    async (job) => {
+      const { taskId, accountId, platform, action, targetUrl } = job.data;
+
+      db.prepare(`UPDATE tasks SET status = "running", started_at = datetime("now"), attempts = attempts + 1 WHERE id = ?`).run(taskId);
+
+      const WorkerClass = platformWorkers[platform];
+      if (!WorkerClass) throw new Error(`No worker for platform: ${platform}`);
+
+      const handler = new WorkerClass();
+      await handler.run({ accountId, action, targetUrl });
+
+      db.prepare(`UPDATE tasks SET status = "done", finished_at = datetime("now") WHERE id = ?`).run(taskId);
+      logger.info('Worker', `[${platform}:${action}] DONE -- account=${accountId}`);
+    },
+    { connection: getRedis(), concurrency }
+  );
+
+  worker.on('failed', (job, err) => {
+    if (!job) return;
+    const { taskId } = job.data;
+    getDb().prepare(`UPDATE tasks SET status = "failed", error = ?, finished_at = datetime("now") WHERE id = ?`)
+      .run(err.message, taskId);
+    logger.error('Worker', `[${job.data.platform}:${job.data.action}] FAILED -- ${err.message}`);
+  });
+
+  worker.on('error', (err) => logger.error('Worker', err.message));
+
+  logger.info('Worker', `Started concurrency=${concurrency}`);
+  return worker;
+}
+
+export async function reEnqueueTask({ taskId, accountId, platform, action, targetUrl, delayMs = 0 }) {
+  const queue = getQueue();
+  await queue.add(
+    `${platform}:${action}`,
+    { taskId, accountId, platform, action, targetUrl },
+    { delay: Math.max(0, delayMs), jobId: taskId }
+  );
+  logger.debug('Queue', `Re-enqueue ${taskId} [${platform}:${action}] delay=${Math.round(delayMs / 1000)}s`);
+}
+
+export async function getQueueStats() {
+  const queue = getQueue();
+  const [waiting, active, completed, failed, delayed] = await Promise.all([
+    queue.getWaitingCount(),
+    queue.getActiveCount(),
+    queue.getCompletedCount(),
+    queue.getFailedCount(),
+    queue.getDelayedCount(),
+  ]);
+  return { waiting, active, completed, failed, delayed };
+}
