@@ -1,4 +1,4 @@
-﻿import { BaseWorker } from './base.worker.js';
+import { BaseWorker } from './base.worker.js';
 import { logger } from '../utils/logger.js';
 import { readFileSync as _readJson } from 'fs';
 import { fileURLToPath as _ftu } from 'url';
@@ -11,14 +11,14 @@ function _pickComment(platform, category = 'default') {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-
 export class PinterestWorker extends BaseWorker {
-  constructor() {
-    super('pinterest');
+  constructor() { super('pinterest'); }
+
+  // Pinterest can SVG de render icon heart/follow — chi block font va video
+  async _blockMedia() {
+    await this.page.route('**/*.{woff,woff2,ttf,mp4,webm}', r => r.abort());
   }
 
-
-  // Kiểm tra session còn hợp lệ — navigate home và xem có bị redirect login không
   async _isLoggedIn() {
     try {
       await this.page.goto('https://www.pinterest.com/', { waitUntil: 'domcontentloaded', timeout: 15000 });
@@ -27,316 +27,296 @@ export class PinterestWorker extends BaseWorker {
       return !url.includes('/login') && !url.includes('/signup');
     } catch { return false; }
   }
-  // ─── Login ────────────────────────────────────────────────────────────────
 
   async login(account) {
     await this.page.goto('https://www.pinterest.com/login/', { waitUntil: 'domcontentloaded' });
     await this.randomDelay(1500, 3000);
-
-    // Đôi khi di chuyển chuột trước khi click — giống người thật
     await this._humanMouseMove();
-
     await this.humanType('input[id="email"]', account.username);
     await this.randomDelay(600, 1500);
-
     await this.humanType('input[id="password"]', account.password);
     await this.randomDelay(700, 1400);
-
-    // Di chuyển chuột đến nút submit trước khi click
     await this._humanMouseMove();
     await this.page.click('button[type="submit"]');
     await this.page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 });
     await this.randomDelay(2500, 5000);
-
     const url = this.page.url();
-    if (url.includes('/login') || url.includes('/signup')) {
-      throw new Error('Đăng nhập Pinterest thất bại — sai thông tin hoặc bị checkpoint');
-    }
-
-    // Đóng popup nếu có (dialog "Get the app", cookie notice, v.v.)
+    if (url.includes('/login') || url.includes('/signup'))
+      throw new Error('Dang nhap Pinterest that bai — sai thong tin hoac bi checkpoint');
     await this._dismissPopups();
-
-    logger.info(this.platform, `Đăng nhập thành công: ${account.username}`);
+    logger.info(this.platform, `Dang nhap thanh cong: ${account.username}`);
   }
 
-  // ─── Execute ──────────────────────────────────────────────────────────────
-
   async execute({ accountId, action, targetUrl }) {
-    // Warmup: duyệt home feed tự nhiên trước khi làm action mục tiêu
     await this._warmup();
-
     switch (action) {
       case 'follow':  return this._follow(targetUrl);
       case 'like':    return this._likePins(targetUrl);
       case 'repin':   return this._repinPin(targetUrl);
       case 'comment': return this._commentPin(targetUrl);
-      default:
-        throw new Error(`Pinterest: action không hỗ trợ — "${action}"`);
+      default: throw new Error(`Pinterest: action khong ho tro — "${action}"`);
     }
   }
 
-  // ─── Warmup ───────────────────────────────────────────────────────────────
-
+  // Warmup: duyet home feed tu nhien
   async _warmup() {
-    logger.debug(this.platform, 'Bắt đầu warmup — duyệt home feed...');
-
+    logger.debug(this.platform, 'Bat dau warmup...');
     await this.page.goto('https://www.pinterest.com/', { waitUntil: 'domcontentloaded' });
-    await this.randomDelay(2000, 4000);
+    await this.randomDelay(3000, 6000);
     await this._dismissPopups();
 
-    // Scroll tự nhiên qua feed
-    const scrollCount = 3 + Math.floor(Math.random() * 4); // 3-6 lần
+    const scrollCount = 3 + Math.floor(Math.random() * 4);
     for (let i = 0; i < scrollCount; i++) {
       await this.naturalScroll(1);
+      await this.randomDelay(2000, 5000); // nhin feed
 
-      // 50% cơ hội hover vào 1 pin đang thấy
-      if (Math.random() > 0.5) {
-        const pins = await this.page.$$('[data-test-id="pin"]');
-        if (pins.length > 0) {
-          const pin = pins[Math.floor(Math.random() * Math.min(pins.length, 6))];
+      if (Math.random() > 0.45) {
+        const pins = await this.page.$('[data-test-id="pin"]');
+        if (pins) {
+          const allPins = await this.page.$$('[data-test-id="pin"]');
+          const pin = allPins[Math.floor(Math.random() * Math.min(allPins.length, 6))];
           await pin.hover().catch(() => {});
-          await this.randomDelay(600, 1800);
+          await this.randomDelay(1200, 4000);
           await this._humanMouseMove();
         }
       }
 
-      // 25% cơ hội click vào 1 pin, xem rồi back
       if (Math.random() > 0.75) {
         await this._browseOnePinAndBack();
+        await this.randomDelay(2000, 5000);
       }
     }
-
     logger.debug(this.platform, 'Warmup xong');
   }
 
-  // Click vào 1 pin, nhìn một lúc rồi quay lại
   async _browseOnePinAndBack() {
     const pins = await this.page.$$('[data-test-id="pin"]');
-    if (pins.length === 0) return;
-
+    if (!pins.length) return;
     const pin = pins[Math.floor(Math.random() * Math.min(pins.length, 8))];
     try {
       await pin.click();
-      await this.randomDelay(3000, 7000); // "đọc" pin
-
-      // Scroll một chút trong modal pin
-      await this.page.mouse.wheel(0, 100 + Math.random() * 200);
-      await this.randomDelay(1000, 2500);
-
-      // Đóng modal (Escape hoặc click vùng ngoài)
+      await this.randomDelay(5000, 12000); // doc pin that su
+      await this.page.mouse.wheel(0, 100 + Math.random() * 300);
+      await this.randomDelay(2000, 5000);
       await this.page.keyboard.press('Escape');
-      await this.randomDelay(800, 1500);
-    } catch {
-      // Ignore nếu modal không đóng được
-    }
+      await this.randomDelay(1000, 2500);
+    } catch {}
   }
 
-  // ─── Actions ─────────────────────────────────────────────────────────────
-
+  // Follow — xem profile truoc, cuon xem pin, roi moi follow
   async _follow(profileUrl) {
-    logger.debug(this.platform, `Navigate đến profile: ${profileUrl}`);
+    logger.debug(this.platform, `Navigate den profile: ${profileUrl}`);
     await this.page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
-    await this.randomDelay(2000, 4500);
+    await this.randomDelay(3000, 7000);
+
     await this._humanMouseMove();
-    await this.naturalScroll(1);
+    await this.randomDelay(2000, 5000); // nhin profile
 
-    // Thử nhiều selector — Pinterest thay đổi data-test-id theo thời gian
-    const followSelectors = [
-      '[data-test-id="follow-button"]',
-      'button[data-test-id*="follow"]',
-      '[data-test-id="profile-follow-button"]',
-      'button[aria-label="Follow"]',
-      'button[aria-label*="Follow"]',
-    ];
+    // Cuon xuong xem pin (check xem co gi hay khong)
+    await this.naturalScroll(2);
+    await this.randomDelay(3000, 7000);
 
-    let followBtn = null;
-    for (const sel of followSelectors) {
-      followBtn = await this.page.$(sel);
-      if (followBtn) break;
+    // Hover 1-2 pin truoc khi follow
+    const pins = await this.page.$$('[data-test-id="pin"]');
+    const previewCount = 1 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < Math.min(previewCount, pins.length); i++) {
+      await pins[i].hover().catch(() => {});
+      await this.randomDelay(1500, 4000);
+      await this._humanMouseMove();
     }
 
-    // Fallback: tìm button text chính xác là "Follow"
+    // Cuon nguoc len header
+    await this.page.mouse.wheel(0, -800);
+    await this.randomDelay(2000, 4500);
+
+    // Tim nut Follow
+    let followBtn = null;
+
+    // Playwright locator voi text matching (dang tin cay nhat)
+    try {
+      const loc = this.page.locator('button:has-text("Follow")').first();
+      if (await loc.count() > 0) followBtn = await loc.elementHandle();
+    } catch {}
+
+    // CSS selector fallbacks
+    if (!followBtn) {
+      for (const sel of [
+        '[data-test-id="follow-button"]',
+        '[data-test-id="header-follow-button"]',
+        '[data-test-id="profile-follow-button"]',
+        'button[aria-label="Follow"]',
+        'button[aria-label*="Follow"]',
+      ]) {
+        followBtn = await this.page.$(sel);
+        if (followBtn) break;
+      }
+    }
+
+    // Scan tat ca button
     if (!followBtn) {
       const buttons = await this.page.$$('button');
       for (const btn of buttons) {
         const txt = await btn.innerText().catch(() => '');
-        if (/^follow$/i.test(txt.trim())) { followBtn = btn; break; }
+        if (txt.trim().toLowerCase() === 'follow') { followBtn = btn; break; }
       }
     }
 
-    if (!followBtn) throw new Error('Không tìm thấy nút Follow');
+    if (!followBtn) throw new Error('Khong tim thay nut Follow');
 
     const text = await followBtn.innerText().catch(() => '');
     if (/following/i.test(text)) {
-      logger.debug(this.platform, `Đã follow rồi: ${profileUrl}`);
+      logger.info(this.platform, `Da follow roi: ${profileUrl}`);
       return;
     }
 
+    // Di chuyen chuot tu nhien den nut — do du truoc khi click
+    await this._humanMouseMove();
+    await this.randomDelay(1000, 3000);
     await followBtn.hover();
-    await this.randomDelay(400, 900);
+    await this.randomDelay(800, 2500); // do du
     await followBtn.click();
-    await this.randomDelay(1500, 3000);
-    logger.info(this.platform, `Đã follow: ${profileUrl}`);
+    await this.randomDelay(2500, 5000);
+    logger.info(this.platform, `Da follow: ${profileUrl}`);
   }
 
+  // Like — vao tung pin, xem that su roi moi like
   async _likePins(profileUrl) {
-    // Thu thập pin URLs từ profile, vào từng pin để click nút ❤️ (react/like)
-    const likeCount = 2 + Math.floor(Math.random() * 3); // 2–4 pin
-    const pinUrls = await this._collectPinUrls(profileUrl, likeCount + 2);
+    const likeCount = 2 + Math.floor(Math.random() * 3);
+    const pinUrls = await this._collectPinUrls(profileUrl, likeCount + 3);
     let successCount = 0;
 
     for (let i = 0; i < Math.min(likeCount, pinUrls.length); i++) {
       const pinUrl = pinUrls[i];
-      logger.debug(this.platform, `Like pin: ${pinUrl}`);
+      logger.debug(this.platform, `Xem pin: ${pinUrl}`);
 
       await this.page.goto(pinUrl, { waitUntil: 'domcontentloaded' });
-      await this.randomDelay(2000, 4000);
-      await this._humanMouseMove();
-      await this.page.mouse.wheel(0, 80 + Math.random() * 120);
-      await this.randomDelay(800, 1800);
+      await this.randomDelay(3500, 8000); // nhin pin sau khi load
 
-      // Tìm nút heart/react — Pinterest dùng nhiều selector khác nhau
-      const likeSelectors = [
+      // Di chuyen chuot nhu dang nhin anh
+      await this._humanMouseMove();
+      await this.randomDelay(2500, 7000); // doc title/description
+
+      // Cuon xuong xem mo ta va comment
+      await this.page.mouse.wheel(0, 150 + Math.random() * 250);
+      await this.randomDelay(2000, 6000);
+
+      if (Math.random() > 0.4) {
+        await this.page.mouse.wheel(0, 80 + Math.random() * 120);
+        await this.randomDelay(1500, 4000);
+      }
+
+      // Cuon nguoc len de nhin pin va click like
+      await this.page.mouse.wheel(0, -(200 + Math.random() * 250));
+      await this.randomDelay(1500, 3500);
+
+      // Tim nut like/react (heart icon)
+      let likeBtn = null;
+      for (const sel of [
         '[data-test-id="react-button"]',
         '[data-test-id="like-button"]',
+        '[data-test-id="pin-closeup-react"]',
         'button[aria-label*="React" i]',
         'button[aria-label*="Like" i]',
         'button[aria-label*="Love" i]',
-        '[data-test-id="pin-action-button"]:first-child',
-      ];
-
-      let likeBtn = null;
-      for (const sel of likeSelectors) {
+      ]) {
         likeBtn = await this.page.$(sel);
         if (likeBtn) break;
       }
 
       if (!likeBtn) {
-        logger.debug(this.platform, `Không tìm thấy nút like, bỏ qua pin`);
+        logger.debug(this.platform, 'Khong tim thay nut like, bo qua');
         continue;
       }
 
-      // Kiểm tra đã like chưa (aria-pressed="true")
       const pressed = await likeBtn.getAttribute('aria-pressed').catch(() => null);
-      if (pressed === 'true') {
-        logger.debug(this.platform, `Pin đã được like rồi`);
-        continue;
-      }
+      if (pressed === 'true') { logger.debug(this.platform, 'Pin da like roi'); continue; }
 
+      // Tu nhien: nhin chỗ khac truoc roi moi hover vao like
+      await this._humanMouseMove();
+      await this.randomDelay(1000, 3000);
       await likeBtn.hover();
-      await this.randomDelay(400, 900);
+      await this.randomDelay(700, 2000); // do du
       await likeBtn.click();
-      await this.randomDelay(1200, 2500);
+      await this.randomDelay(2500, 5500);
 
       successCount++;
-      logger.info(this.platform, `Đã like: ${pinUrl}`);
-
-      if (i < likeCount - 1) await this.randomDelay(3000, 7000);
+      logger.info(this.platform, `Da like: ${pinUrl}`);
+      if (i < likeCount - 1) await this.randomDelay(8000, 18000); // nghi giua cac lan
     }
-
-    logger.info(this.platform, `Đã like ${successCount} pin từ profile: ${profileUrl}`);
+    logger.info(this.platform, `Da like ${successCount} pin tu: ${profileUrl}`);
   }
 
   async _repinPin(targetUrl) {
-    // Repin 1–2 pin trong 1 session
     const repinCount = Math.random() > 0.5 ? 2 : 1;
-
-    // Lấy danh sách pin URLs từ profile (tránh repin cùng 1 pin)
     const pinUrls = await this._collectPinUrls(targetUrl, repinCount + 2);
     let successCount = 0;
 
     for (let i = 0; i < Math.min(repinCount, pinUrls.length); i++) {
-      const pinUrl = pinUrls[i];
-      logger.debug(this.platform, `Navigate đến pin: ${pinUrl}`);
-
-      await this.page.goto(pinUrl, { waitUntil: 'domcontentloaded' });
-      await this.randomDelay(2500, 5000);
-
+      await this.page.goto(pinUrls[i], { waitUntil: 'domcontentloaded' });
+      await this.randomDelay(3000, 7000);
       await this._humanMouseMove();
       await this.page.mouse.wheel(0, 100 + Math.random() * 150);
-      await this.randomDelay(1500, 3500);
+      await this.randomDelay(2000, 5000);
 
       const saveBtn = await this.page.$('[data-test-id="save-button"]');
       if (!saveBtn) continue;
-
       await saveBtn.hover();
-      await this.randomDelay(400, 900);
+      await this.randomDelay(500, 1500);
       await saveBtn.click();
-      await this.randomDelay(1200, 2500);
+      await this.randomDelay(1500, 3500);
       await this._selectBoard();
-
       successCount++;
-      if (i < repinCount - 1) await this.randomDelay(4000, 9000);
+      if (i < repinCount - 1) await this.randomDelay(6000, 14000);
     }
-
-    logger.info(this.platform, `Đã repin ${successCount} pin`);
+    logger.info(this.platform, `Da repin ${successCount} pin`);
   }
 
   async _commentPin(targetUrl) {
     const pinUrl = await this._resolvePinUrl(targetUrl);
-    logger.debug(this.platform, `Navigate đến pin: ${pinUrl}`);
-
     await this.page.goto(pinUrl, { waitUntil: 'domcontentloaded' });
-    await this.randomDelay(2500, 5000);
-
-    // Scroll xuống để đến phần comment
+    await this.randomDelay(3000, 7000);
     await this.page.mouse.wheel(0, 300 + Math.random() * 200);
-    await this.randomDelay(1000, 2000);
+    await this.randomDelay(1500, 3500);
 
     const selectors = [
       '[data-test-id="comment-field"]',
       'textarea[placeholder*="comment" i]',
       'textarea[placeholder*="Add a comment" i]',
     ];
-
     let commentField = null;
     for (const sel of selectors) {
       commentField = await this.page.$(sel);
       if (commentField) break;
     }
-    if (!commentField) throw new Error('Không tìm thấy ô comment');
+    if (!commentField) throw new Error('Khong tim thay o comment');
 
-    // Di chuyển chuột đến field rồi click
     await commentField.hover();
-    await this.randomDelay(400, 900);
+    await this.randomDelay(600, 1500);
     await commentField.click();
-    await this.randomDelay(600, 1400);
-
-    // Type từng ký tự như người thật (đôi khi sai + xóa)
+    await this.randomDelay(800, 2000);
     const text = _pickComment('pinterest');
     await this._humanTypeWithMistake(text);
-
-    await this.randomDelay(800, 2000);
+    await this.randomDelay(1000, 2500);
     await this.page.keyboard.press('Enter');
-    await this.randomDelay(1200, 2500);
-
-    logger.info(this.platform, `Đã comment: "${text}"`);
+    await this.randomDelay(1500, 3500);
+    logger.info(this.platform, `Da comment: "${text}"`);
   }
 
-  // ─── Helpers ─────────────────────────────────────────────────────────────
-
-  // Lấy 1 pin URL (dùng cho comment)
   async _resolvePinUrl(targetUrl) {
     const urls = await this._collectPinUrls(targetUrl, 1);
-    if (urls.length === 0) throw new Error('Không tìm thấy pin trên profile');
+    if (!urls.length) throw new Error('Khong tim thay pin tren profile');
     return urls[0];
   }
 
-  // Lấy `count` pin URLs ngẫu nhiên từ profile (shuffle để không lặp thứ tự)
   async _collectPinUrls(targetUrl, count) {
     if (targetUrl.includes('/pin/')) return [targetUrl];
-
     await this.page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
-    await this.randomDelay(2000, 4000);
+    await this.randomDelay(2500, 5500);
     await this.naturalScroll(2);
-
     const pins = await this.page.$$('[data-test-id="pin"]');
-    if (pins.length === 0) return [];
-
-    // Shuffle rồi lấy `count` pin đầu
+    if (!pins.length) return [];
     const shuffled = [...pins].sort(() => Math.random() - 0.5).slice(0, count + 5);
     const urls = [];
-
     for (const pin of shuffled) {
       if (urls.length >= count) break;
       const link = await pin.$('a');
@@ -344,28 +324,23 @@ export class PinterestWorker extends BaseWorker {
       if (!href) continue;
       urls.push(href.startsWith('http') ? href : `https://www.pinterest.com${href}`);
     }
-
     return urls;
   }
 
-  // Chọn board khi dialog Save xuất hiện
   async _selectBoard() {
     try {
-      await this.page.waitForSelector('[data-test-id="board-row"]', { timeout: 4000 });
+      await this.page.waitForSelector('[data-test-id="board-row"]', { timeout: 5000 });
       const boards = await this.page.$$('[data-test-id="board-row"]');
       if (boards.length > 0) {
         const board = boards[Math.floor(Math.random() * boards.length)];
         await board.hover();
-        await this.randomDelay(300, 700);
+        await this.randomDelay(400, 900);
         await board.click();
-        await this.randomDelay(600, 1500);
+        await this.randomDelay(800, 2000);
       }
-    } catch {
-      // Save thẳng không cần chọn board — OK
-    }
+    } catch {}
   }
 
-  // Đóng các popup thường gặp
   async _dismissPopups() {
     const dismissSelectors = [
       '[data-test-id="block-dismiss-button"]',
@@ -377,12 +352,8 @@ export class PinterestWorker extends BaseWorker {
     for (const sel of dismissSelectors) {
       try {
         const btn = await this.page.$(sel);
-        if (btn) {
-          await btn.click();
-          await this.randomDelay(500, 1000);
-        }
+        if (btn) { await btn.click(); await this.randomDelay(500, 1200); }
       } catch {}
     }
   }
-
 }
