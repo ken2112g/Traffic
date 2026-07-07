@@ -91,7 +91,7 @@
       </div>
       <div class="form-group">
         <label class="form-label">Nền tảng *</label>
-        <select class="form-input" name="platform" id="campaign-platform" onchange="updateActionCheckboxes(this.value)" required>
+        <select class="form-input" name="platform" id="campaign-platform" onchange="updateActionCheckboxes(this.value); updateTargetPreview()" required>
           <option value="">Chọn nền tảng…</option>
           <option value="pinterest">Pinterest</option>
           <option value="instagram">Instagram</option>
@@ -103,12 +103,16 @@
       </div>
       <div class="form-group">
         <label class="form-label">Tài khoản đích *</label>
-        <input class="form-input" name="target_account" placeholder="username (không có @)" required>
+        <input class="form-input" name="target_account" placeholder="username (không có @)" required oninput="updateTargetPreview()">
       </div>
       <div class="form-group">
         <label class="form-label">URL mục tiêu</label>
-        <input class="form-input" name="target_url" type="url" placeholder="https://…">
+        <input class="form-input" name="target_url" type="url" placeholder="https://…" oninput="updateTargetPreview()">
         <div class="form-hint">Để trống sẽ tự tạo từ username</div>
+        <div class="form-hint">
+          <span id="target-preview-text">Nhập tài khoản/nền tảng để xem trước</span>
+          <a id="target-preview-link" href="#" target="_blank" rel="noopener" style="display:none;margin-left:6px;color:var(--accent)">Mở &#8599;</a>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Hành động *</label>

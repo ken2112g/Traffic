@@ -1,4 +1,4 @@
-﻿
+
 /* === Constants === */
 const PLATFORMS = ['pinterest','instagram','tiktok','youtube','twitter','facebook'];
 const PLATFORM_ACTIONS = {
@@ -104,6 +104,39 @@ window.updateActionCheckboxes = function(platform) {
   ).join('');
 };
 
+function buildTargetUrl(platform, username) {
+  if (!platform || !username) return '';
+  if (platform === 'instagram') return `https://www.instagram.com/${username}/`;
+  if (platform === 'tiktok')    return `https://www.tiktok.com/@${username}`;
+  if (platform === 'twitter')   return `https://twitter.com/${username}`;
+  if (platform === 'facebook')  return `https://www.facebook.com/${username}`;
+  if (platform === 'youtube')   return `https://www.youtube.com/@${username}`;
+  if (platform === 'pinterest') return `https://www.pinterest.com/${username}/`;
+  return '';
+}
+
+window.updateTargetPreview = function() {
+  const form = document.getElementById('campaign-form');
+  const platform = form.querySelector('[name="platform"]').value;
+  const username = form.querySelector('[name="target_account"]').value.trim();
+  const urlOverride = form.querySelector('[name="target_url"]').value.trim();
+  const resolved = urlOverride || buildTargetUrl(platform, username);
+  const textEl = document.getElementById('target-preview-text');
+  const linkEl = document.getElementById('target-preview-link');
+  if (!resolved) {
+    textEl.textContent = 'Nhập tài khoản/nền tảng để xem trước';
+    linkEl.style.display = 'none';
+    return;
+  }
+  textEl.textContent = '→ ' + resolved;
+  if (/^https?:\/\//i.test(resolved)) {
+    linkEl.href = resolved;
+    linkEl.style.display = 'inline';
+  } else {
+    linkEl.style.display = 'none';
+  }
+};
+
 window.submitCampaign = async function(e) {
   e.preventDefault();
   const fd = new FormData(e.target);
@@ -111,7 +144,7 @@ window.submitCampaign = async function(e) {
   if (!actions.length) { toast('Chọn ít nhất một hành động', 'error'); return; }
   try {
     await api('POST', '/campaigns', { name: fd.get('name'), platform: fd.get('platform'), target_account: fd.get('target_account'), target_url: fd.get('target_url') || null, actions, schedule: fd.get('schedule') || 'auto', account_ids: fd.get('account_ids') });
-    toast('Đã tạo chiến dịch'); closeDrawer(); e.target.reset();
+    toast('Đã tạo chiến dịch'); closeDrawer(); e.target.reset(); updateActionCheckboxes(''); updateTargetPreview();
     if (PLATFORMS.includes(currentView)) navigate(currentView);
   } catch (err) { toast(err.message, 'error'); }
 };
