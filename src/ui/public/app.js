@@ -146,14 +146,52 @@ window.updateTargetPreview = function() {
   }
 };
 
+window.scheduleModeChanged = function(prefix) {
+  const mode = document.getElementById(prefix + '-mode').value;
+  const timeWrap = document.getElementById(prefix + '-time-wrap');
+  const cronWrap = document.getElementById(prefix + '-cron-wrap');
+  if (timeWrap) timeWrap.style.display = mode === 'time' ? 'block' : 'none';
+  if (cronWrap) cronWrap.style.display = mode === 'advanced' ? 'block' : 'none';
+};
+
+function readScheduleValue(prefix) {
+  const mode = document.getElementById(prefix + '-mode').value;
+  if (mode === 'time') {
+    const parts = (document.getElementById(prefix + '-time').value || '08:00').split(':');
+    const hh = parseInt(parts[0], 10), mm = parseInt(parts[1], 10);
+    return `${mm} ${hh} * * *`;
+  }
+  if (mode === 'advanced') {
+    return (document.getElementById(prefix + '-cron').value || '0 8 * * *').trim();
+  }
+  return 'auto';
+}
+
+function initScheduleMode(prefix, currentSchedule) {
+  const modeSel = document.getElementById(prefix + '-mode');
+  const value = (currentSchedule || 'auto').trim();
+  const m = /^(\d{1,2}) (\d{1,2}) \* \* \*$/.exec(value);
+  if (value === 'auto') {
+    modeSel.value = 'auto';
+  } else if (m) {
+    modeSel.value = 'time';
+    const hh = String(m[2]).padStart(2, '0'), mm = String(m[1]).padStart(2, '0');
+    document.getElementById(prefix + '-time').value = `${hh}:${mm}`;
+  } else {
+    modeSel.value = 'advanced';
+    document.getElementById(prefix + '-cron').value = value;
+  }
+  scheduleModeChanged(prefix);
+}
+
 window.submitCampaign = async function(e) {
   e.preventDefault();
   const fd = new FormData(e.target);
   const actions = [...e.target.querySelectorAll('[name="actions"]:checked')].map(c => c.value);
   if (!actions.length) { toast('Chọn ít nhất một hành động', 'error'); return; }
   try {
-    await api('POST', '/campaigns', { name: fd.get('name'), platform: fd.get('platform'), target_account: fd.get('target_account'), target_url: fd.get('target_url') || null, actions, schedule: fd.get('schedule') || 'auto', account_ids: fd.get('account_ids') });
-    toast('Đã tạo chiến dịch'); closeDrawer(); e.target.reset(); updateActionCheckboxes(''); updateTargetPreview();
+    await api('POST', '/campaigns', { name: fd.get('name'), platform: fd.get('platform'), target_account: fd.get('target_account'), target_url: fd.get('target_url') || null, actions, schedule: readScheduleValue('schedule'), account_ids: fd.get('account_ids') });
+    toast('Đã tạo chiến dịch'); closeDrawer(); e.target.reset(); updateActionCheckboxes(''); updateTargetPreview(); scheduleModeChanged('schedule');
     if (PLATFORMS.includes(currentView)) navigate(currentView);
   } catch (err) { toast(err.message, 'error'); }
 };

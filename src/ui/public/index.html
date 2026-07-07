@@ -123,8 +123,18 @@
       </div>
       <div class="form-group">
         <label class="form-label">Lịch chạy</label>
-        <input class="form-input" name="schedule" placeholder="auto  hoặc  0 8 * * *">
-        <div class="form-hint">&quot;auto&quot; = 8 giờ sáng mỗi ngày. Cron expression để tùy chỉnh.</div>
+        <select class="form-input" id="schedule-mode" onchange="scheduleModeChanged('schedule')">
+          <option value="auto">Tự động (8 giờ sáng mỗi ngày)</option>
+          <option value="time">Giờ cụ thể</option>
+          <option value="advanced">Nâng cao (cron tùy chỉnh)</option>
+        </select>
+        <div id="schedule-time-wrap" style="display:none;margin-top:6px">
+          <input class="form-input" type="time" id="schedule-time" value="08:00">
+        </div>
+        <div id="schedule-cron-wrap" style="display:none;margin-top:6px">
+          <input class="form-input" id="schedule-cron" placeholder="0 8 * * *">
+          <div class="form-hint">Cron expression: phút giờ ngày tháng thứ. VD &quot;0 8 * * *&quot; = 8 giờ sáng mỗi ngày.</div>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Tài khoản</label>
