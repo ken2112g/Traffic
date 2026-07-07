@@ -118,6 +118,7 @@ window.submitCampaign = async function(e) {
 
 /* Router */
 function navigate(view) {
+  if (monitorInterval && view !== 'monitor') { clearInterval(monitorInterval); monitorInterval = null; }
   currentView = view;
   document.querySelectorAll('.nav-item[data-view]').forEach(el =>
     el.classList.toggle('active', el.dataset.view === view));
@@ -355,6 +356,7 @@ async function renderPlatformCampaigns(platform, el) {
       '<td>' + actionPills(c.actions) + '</td>' +
       '<td class="td-sm">' + esc(c.schedule==='auto'?'8 giờ sáng hằng ngày':c.schedule) + '</td>' +
       '<td class="td-sm">' + c.account_count + '</td>' +
+      '<td id="camp-prog-' + c.id + '"><div class="skeleton" style="height:6px;width:80px;border-radius:3px"></div></td>' +
       '<td>' + (c.is_active ? badge('active') : badge('idle')) + '</td>' +
       '<td class="col-actions"><div class="gap-actions">' +
       `<button class="btn btn--xs btn--secondary" onclick="toggleCampaign('${c.id}')">${c.is_active?'Tạm dừng':'Tiếp tục'}</button>` +
@@ -365,9 +367,17 @@ async function renderPlatformCampaigns(platform, el) {
       `<button class="btn btn--xs btn--danger" onclick="deleteCampaign('${c.id}')">Xóa</button>` +
       '</div></td></tr>'
     ).join('');
-    html += '<div class="table-wrap"><table><thead><tr><th>Ten</th><th>Mục tiêu</th><th>Hành động</th><th>Lịch chạy</th><th>Tài khoản</th><th>Trạng thái</th><th class="col-actions">Quản lý</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    html += '<div class="table-wrap"><table><thead><tr><th>Tên</th><th>Mục tiêu</th><th>Hành động</th><th>Lịch chạy</th><th>TK</th><th>Tiến độ</th><th>Trạng thái</th><th class="col-actions">Quản lý</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
   }
   el.innerHTML = html;
+  if (campaigns.length) {
+    api('GET', '/campaigns/progress?platform=' + platform).then(function(pdata) {
+      pdata.forEach(function(c) {
+        const pe = document.getElementById('camp-prog-' + c.id);
+        if (pe) pe.innerHTML = taskProgressBar(c.done||0,c.failed||0,c.running||0,c.pending||0);
+      });
+    }).catch(function(){});
+  }
 }
 
 /* Tasks tab */
@@ -403,6 +413,169 @@ window.reloadPlatformTasks = async function(platform) {
   } catch (err) { wrap.innerHTML = '<div class="error-text">' + esc(err.message) + '</div>'; }
 };
 
+
+﻿/* Monitor state */
+let monitorInterval = null;
+
+/* Elapsed time helper */
+function elapsed(dtStr) {
+  if (!dtStr) return "";
+  const ms = Date.now() - new Date(dtStr).getTime();
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return s + "s";
+  const m = Math.floor(s / 60); const rs = s % 60;
+  if (m < 60) return m + "m " + rs + "s";
+  return Math.floor(m/60) + "h " + (m%60) + "m";
+}
+
+/* Progress bar for task counts */
+function taskProgressBar(done, failed, running, pending) {
+  const total = done + failed + running + pending;
+  if (!total) return "<span class=\"text-muted text-xs\">Chưa có task</span>";
+  const pct = Math.round(done/total*100);
+  const cls = pct>=100?"full":pct>=75?"warn":"";
+  return "<div style=\"display:flex;flex-direction:column;gap:3px;min-width:110px\">" +
+    "<div class=\"progress-bar\" style=\"height:4px\"><div class=\"progress-fill " + cls + "\" style=\"width:" + pct + "%\"></div></div>" +
+    "<span style=\"font-size:10px;color:var(--muted);font-family:var(--mono)\">" +
+    "<span style=\"color:var(--accent)\">" + done + " xong</span>" +
+    (failed ? "<span style=\"color:var(--error)\"> &middot; " + failed + " lỗi</span>" : "") +
+    (running ? "<span style=\"color:var(--warn)\"> &middot; " + running + " chạy</span>" : "") +
+    (pending ? "<span style=\"color:var(--muted)\"> &middot; " + pending + " chờ</span>" : "") +
+    "</span></div>";
+}
+
+/* === MONITOR VIEW === */
+async function monitor(el) {
+  if (monitorInterval) { clearInterval(monitorInterval); monitorInterval = null; }
+  el.innerHTML =
+    "<div class=\"view-header\">" +
+    "<h1>Theo dõi</h1>" +
+    "<div class=\"view-actions\">" +
+    "<span id=\"monitor-ts\" style=\"font-size:11px;color:var(--muted);align-self:center\"></span>" +
+    "<button class=\"btn btn--secondary btn--sm\" onclick=\"refreshMonitor()\">&#x21bb; Làm mới</button>" +
+    "</div></div>" +
+    "<div id=\"mon-running\" class=\"monitor-section\"></div>" +
+    "<div id=\"mon-queue\"   class=\"monitor-section\"></div>" +
+    "<div id=\"mon-history\" class=\"monitor-section\"></div>";
+  await refreshMonitor();
+  monitorInterval = setInterval(refreshMonitor, 4000);
+}
+
+window.refreshMonitor = async function() {
+  try {
+    const [running, pending, history, progress] = await Promise.all([
+      api("GET", "/tasks?status=running&limit=100"),
+      api("GET", "/tasks?status=pending&limit=300"),
+      api("GET", "/tasks?limit=60"),
+      api("GET", "/campaigns/progress").catch(function(){return [];}),
+    ]);
+    renderMonitorRunning(running);
+    renderMonitorQueue(pending, progress);
+    renderMonitorHistory(history.filter(function(t){return t.status==="done"||t.status==="failed";}).slice(0,40));
+    const ts = document.getElementById("monitor-ts");
+    if (ts) ts.textContent = "Đã cập nhật: " + new Date().toLocaleTimeString("vi-VN",{hour12:false});
+  } catch(err) { console.error("monitor refresh:", err); }
+};
+
+function renderMonitorRunning(tasks) {
+  const el = document.getElementById("mon-running");
+  if (!el) return;
+  const count = tasks.length;
+  let html = "<div class=\"monitor-card\">" +
+    "<div class=\"monitor-card-title\">" +
+    "<span class=\"monitor-dot" + (count?"":"-off") + "\"></span>" +
+    (count ? count + " tác vụ đang chạy" : "Đang rảnh — không có tác vụ nào") +
+    "</div>";
+  if (!count) {
+    html += "<div style=\"padding:20px;text-align:center;color:var(--muted);font-size:13px\">Hệ thống đang rảnh</div>";
+  } else {
+    html += "<div class=\"monitor-table-wrap\"><table class=\"monitor-table\"><thead><tr>" +
+      "<th>Tài khoản</th><th>Hành động</th><th>Chiến dịch</th><th>Nền tảng</th><th>Thời gian</th>" +
+      "</tr></thead><tbody>" +
+      tasks.map(function(t) {
+        return "<tr class=\"monitor-row\">" +
+          "<td class=\"td-mono\" style=\"font-weight:600\">" + esc(t.account_username||"?") + "</td>" +
+          "<td><span class=\"action-pill\">" + esc(t.action) + "</span></td>" +
+          "<td style=\"color:var(--ink-2)\">" + esc(t.campaign_name||"---") + "</td>" +
+          "<td style=\"color:var(--muted)\">" + esc(t.platform) + "</td>" +
+          "<td><span class=\"elapsed-badge\">" + elapsed(t.started_at) + "</span></td>" +
+          "</tr>";
+      }).join("") +
+      "</tbody></table></div>";
+  }
+  el.innerHTML = html + "</div>";
+}
+
+function renderMonitorQueue(pending, progress) {
+  const el = document.getElementById("mon-queue");
+  if (!el) return;
+  const byPlatform = {};
+  pending.forEach(function(t){ byPlatform[t.platform]=(byPlatform[t.platform]||0)+1; });
+
+  let progressHtml = "";
+  if (progress && progress.length) {
+    const active = progress.filter(function(c){return c.is_active;});
+    if (active.length) {
+      progressHtml = "<div class=\"monitor-card\">" +
+        "<div class=\"monitor-card-title\">Tiến độ chiến dịch</div>" +
+        "<div class=\"monitor-table-wrap\"><table class=\"monitor-table\"><thead><tr>" +
+        "<th>Chiến dịch</th><th>Mục tiêu</th><th>Nền tảng</th><th>Tiến độ</th>" +
+        "</tr></thead><tbody>" +
+        active.map(function(c) {
+          return "<tr><td style=\"font-weight:500\">" + esc(c.name) + "</td>" +
+            "<td class=\"td-mono\">@" + esc(c.target_account) + "</td>" +
+            "<td style=\"color:var(--muted)\">" + esc(c.platform) + "</td>" +
+            "<td>" + taskProgressBar(c.done||0,c.failed||0,c.running||0,c.pending||0) + "</td></tr>";
+        }).join("") +
+        "</tbody></table></div></div>";
+    }
+  }
+
+  const total = pending.length;
+  const byPlatHtml = Object.entries(byPlatform).map(function(e){
+    return "<span style=\"color:var(--ink-2)\">" + capitalize(e[0]) + ": <b>" + e[1] + "</b></span>";
+  }).join(" &nbsp;");
+  const queueHtml = "<div class=\"monitor-card\">" +
+    "<div class=\"monitor-card-title\">" +
+    "<span style=\"font-size:13px;font-weight:600;color:var(--warn)\">" + total + "</span>" +
+    " tác vụ đang chờ" + (total ? " &mdash; " + byPlatHtml : "") +
+    "</div>" +
+    (!total ? "<div style=\"padding:12px;color:var(--muted);font-size:13px\">Hàng chờ trống</div>" : "") +
+    "</div>";
+
+  el.innerHTML = queueHtml + progressHtml;
+}
+
+function renderMonitorHistory(tasks) {
+  const el = document.getElementById("mon-history");
+  if (!el) return;
+  if (!tasks.length) {
+    el.innerHTML = "<div class=\"monitor-card\"><div class=\"monitor-card-title\">Lịch sử gần đây</div><div style=\"padding:20px;text-align:center;color:var(--muted)\">Chưa có</div></div>";
+    return;
+  }
+  const done   = tasks.filter(function(t){return t.status==="done";}).length;
+  const failed = tasks.filter(function(t){return t.status==="failed";}).length;
+  el.innerHTML = "<div class=\"monitor-card\">" +
+    "<div class=\"monitor-card-title\">Lịch sử gần đây &nbsp;" +
+    "<span style=\"color:var(--accent);font-size:11px\">" + done + " thành công</span>" +
+    (failed ? " &nbsp;<span style=\"color:var(--error);font-size:11px\">" + failed + " thất bại</span>" : "") +
+    "</div>" +
+    "<div class=\"monitor-table-wrap\"><table class=\"monitor-table\"><thead><tr>" +
+    "<th>Tài khoản</th><th>Hành động</th><th>Chiến dịch</th><th>Trạng thái</th><th>Hoàn thành</th><th></th>" +
+    "</tr></thead><tbody>" +
+    tasks.map(function(t) {
+      const hasErr = t.status==="failed" && t.error;
+      return "<tr" + (hasErr?" style=\"cursor:pointer\" onclick=\"showTaskError(this)\" data-error=\""+esc(t.error||"")+"\"":"") + ">" +
+        "<td class=\"td-mono\">" + esc(t.account_username||"?") + "</td>" +
+        "<td><span class=\"action-pill\">" + esc(t.action) + "</span></td>" +
+        "<td style=\"color:var(--ink-2);font-size:12px\">" + esc(t.campaign_name||"---") + "</td>" +
+        "<td>" + badge(t.status) + "</td>" +
+        "<td class=\"td-sm\">" + fmt(t.finished_at) + "</td>" +
+        "<td class=\"col-actions\">" + (t.status==="failed"?"<button class=\"btn btn--xs btn--secondary\" onclick=\"event.stopPropagation();retryTask(\'"+t.id+"\')\">Thử lại</button>":"") + "</td>" +
+        "</tr>";
+    }).join("") +
+    "</tbody></table></div></div>";
+}
 
 /* === PROXIES === */
 async function proxies(el) {
@@ -520,6 +693,9 @@ function _applyRealtimeStats(s) {
   set('stat-done',    tasks.done   ||0);
   set('stat-failed',  tasks.failed ||0);
   set('stat-pending', (tasks.pending||0)+(tasks.running||0));
+  const runBadge = document.getElementById('sidebar-running-dot');
+  if (runBadge) { const n=accs.running||0; runBadge.textContent=n; runBadge.style.display=n>0?'inline-flex':'none'; }
+  if (currentView === 'monitor' && s.runningTasks) renderMonitorRunning(s.runningTasks);
 }
 function logEntryHtml(e) {
   const lvl=(e.level||'info').toLowerCase();
@@ -759,7 +935,7 @@ window.showTaskError = function(row) {
   openModal('Lỗi tác vụ', '<pre style="font-size:12px;white-space:pre-wrap;word-break:break-all;color:var(--error)">' + esc(msg) + '</pre>');
 };
 
-const views = { overview, proxies, logs, settings, system };
+const views = { overview, proxies, logs, settings, system, monitor };
 
 window.addEventListener('hashchange', function() {
   const v=location.hash.slice(1)||'overview';

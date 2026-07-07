@@ -64,22 +64,27 @@ setInterval(() => {
   } catch {}
 }, 1500);
 
-// Gửi stats realtime mỗi 10s
+// Gửi stats realtime mỗi 5s (kèm running tasks)
 setInterval(() => {
   if (!sseClients.size) return;
   try {
     const db = getDb();
     const toMap = rows => Object.fromEntries(rows.map(r => [r.status || 'unknown', r.count]));
+    const runningTasks = db.prepare(`
+      SELECT t.*,a.username as account_username,c.name as campaign_name
+      FROM tasks t LEFT JOIN accounts a ON a.id=t.account_id LEFT JOIN campaigns c ON c.id=t.campaign_id
+      WHERE t.status='running' ORDER BY t.started_at ASC LIMIT 50`).all();
     const stats = {
-      _type:     'stats',
-      accounts:  toMap(db.prepare('SELECT status, COUNT(*) as count FROM accounts GROUP BY status').all()),
-      campaigns: db.prepare('SELECT COUNT(*) as count FROM campaigns WHERE is_active=1').get().count,
-      tasks:     toMap(db.prepare('SELECT status, COUNT(*) as count FROM tasks GROUP BY status').all()),
-      proxies:   toMap(db.prepare('SELECT status, COUNT(*) as count FROM proxies GROUP BY status').all()),
+      _type:        'stats',
+      accounts:     toMap(db.prepare('SELECT status, COUNT(*) as count FROM accounts GROUP BY status').all()),
+      campaigns:    db.prepare('SELECT COUNT(*) as count FROM campaigns WHERE is_active=1').get().count,
+      tasks:        toMap(db.prepare('SELECT status, COUNT(*) as count FROM tasks GROUP BY status').all()),
+      proxies:      toMap(db.prepare('SELECT status, COUNT(*) as count FROM proxies GROUP BY status').all()),
+      runningTasks: runningTasks,
     };
     sseClients.forEach(s => s(stats));
   } catch {}
-}, 10000);
+}, 5000);
 
 // ─── Stats ─────────────────────────────────────────────────────────────────────
 app.get('/api/stats', (req, res) => {
@@ -311,8 +316,9 @@ app.get('/api/tasks', (req, res) => {
     let sql = `SELECT t.*,a.username as account_username,c.name as campaign_name
                FROM tasks t LEFT JOIN accounts a ON a.id=t.account_id LEFT JOIN campaigns c ON c.id=t.campaign_id`;
     const w = [], pr = [];
-    if (status   && status   !== 'all') { w.push('t.status=?');   pr.push(status);   }
-    if (platform && platform !== 'all') { w.push('t.platform=?'); pr.push(platform); }
+    if (status      && status      !== 'all') { w.push('t.status=?');      pr.push(status);      }
+    if (platform    && platform    !== 'all') { w.push('t.platform=?');    pr.push(platform);    }
+    if (req.query.campaign_id) { w.push('t.campaign_id=?'); pr.push(req.query.campaign_id); }
     if (w.length) sql += ' WHERE ' + w.join(' AND ');
     sql += ' ORDER BY t.created_at DESC LIMIT ? OFFSET ?';
     pr.push(Number(limit), Number(offset));
@@ -454,6 +460,25 @@ app.post('/api/tasks/drain', async (req, res) => {
     } catch {}
 
     res.json({ ok: true, count });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
+// ─── Campaign progress (task counts per campaign) ──────────────────────────
+app.get('/api/campaigns/progress', (req, res) => {
+  try {
+    const db = getDb(); const { platform } = req.query;
+    let sql = `SELECT c.id,c.name,c.platform,c.target_account,c.is_active,
+      SUM(CASE WHEN t.status='done'    THEN 1 ELSE 0 END) as done,
+      SUM(CASE WHEN t.status='failed'  THEN 1 ELSE 0 END) as failed,
+      SUM(CASE WHEN t.status='running' THEN 1 ELSE 0 END) as running,
+      SUM(CASE WHEN t.status='pending' THEN 1 ELSE 0 END) as pending,
+      COUNT(t.id) as total
+      FROM campaigns c LEFT JOIN tasks t ON t.campaign_id=c.id`;
+    const pr = [];
+    if (platform && platform !== 'all') { sql += ' WHERE c.platform=?'; pr.push(platform); }
+    sql += ' GROUP BY c.id ORDER BY c.created_at DESC';
+    res.json(db.prepare(sql).all(...pr));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
