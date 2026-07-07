@@ -980,18 +980,28 @@ window.editCampaign = function(id) {
     '<div class="form-group"><label class="form-label">URL mục tiêu (tùy chọn)</label>' +
     '<input class="form-input" id="ec-url" value="' + esc(c.target_url||'') + '" placeholder="https://..."></div>' +
     '<div class="form-group"><label class="form-label">Lịch chạy</label>' +
-    '<input class="form-input" id="ec-sched" value="' + esc(c.schedule||'auto') + '" placeholder="auto or cron"></div>' +
+    '<select class="form-input" id="ec-schedule-mode" onchange="scheduleModeChanged(&apos;ec-schedule&apos;)">' +
+    '<option value="auto">Tự động (8 giờ sáng mỗi ngày)</option>' +
+    '<option value="time">Giờ cụ thể</option>' +
+    '<option value="advanced">Nâng cao (cron tùy chỉnh)</option>' +
+    '</select>' +
+    '<div id="ec-schedule-time-wrap" style="display:none;margin-top:6px">' +
+    '<input class="form-input" type="time" id="ec-schedule-time" value="08:00"></div>' +
+    '<div id="ec-schedule-cron-wrap" style="display:none;margin-top:6px">' +
+    '<input class="form-input" id="ec-schedule-cron" placeholder="0 8 * * *"></div>' +
+    '</div>' +
     '<div class="form-group"><label class="form-label">Hành động (cach nhau boi dau phay)</label>' +
     '<input class="form-input" id="ec-actions" value="' + esc(actions) + '"></div>',
     '<button class="btn btn--secondary" onclick="closeModal()">Hủy</button>' +
     '<button class="btn btn--primary" id="ec-save">Lưu</button>'
   );
+  initScheduleMode('ec-schedule', c.schedule);
   document.getElementById('ec-save').onclick = () => submitEditCampaign(id);
 };
 window.submitEditCampaign = async function(id) {
   const name     = document.getElementById('ec-name').value.trim();
   const url      = document.getElementById('ec-url').value.trim() || null;
-  const schedule = document.getElementById('ec-sched').value.trim() || 'auto';
+  const schedule = readScheduleValue('ec-schedule');
   const actions  = document.getElementById('ec-actions').value.split(',').map(s=>s.trim()).filter(Boolean);
   if (!name) { toast('Cần nhập tên','error'); return; }
   try {
