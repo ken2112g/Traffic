@@ -107,7 +107,11 @@ export class PinterestWorker extends BaseWorker {
   async _follow(profileUrl) {
     logger.debug(this.platform, `Navigate den profile: ${profileUrl}`);
     await this.page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
-    await this.randomDelay(3000, 7000);
+    await this.randomDelay(3000, 6000);
+
+    // Scroll to top de dam bao header + Follow button hien thi
+    await this.page.evaluate(() => window.scrollTo(0, 0));
+    await this.randomDelay(1000, 2000);
 
     await this._humanMouseMove();
     await this.randomDelay(2000, 5000); // nhin profile
@@ -125,20 +129,20 @@ export class PinterestWorker extends BaseWorker {
       await this._humanMouseMove();
     }
 
-    // Cuon nguoc len header
-    await this.page.mouse.wheel(0, -800);
-    await this.randomDelay(2000, 4500);
+    // Cuon nguoc len header bang JS (tuyet doi, khong phu thuoc vao scroll amount)
+    await this.page.evaluate(() => window.scrollTo(0, 0));
+    await this.randomDelay(1500, 3000);
 
-    // Tim nut Follow
+    // Tim nut Follow — ho tro ca tieng Anh va tieng Viet (Pinterest dung IP geo de xac dinh ngon ngu)
     let followBtn = null;
 
-    // Playwright locator voi text matching (dang tin cay nhat)
+    // Tier 1: Playwright locator text matching
     try {
-      const loc = this.page.locator('button:has-text("Follow")').first();
+      const loc = this.page.locator('button:has-text("Follow"), button:has-text("Theo d")').first();
       if (await loc.count() > 0) followBtn = await loc.elementHandle();
     } catch {}
 
-    // CSS selector fallbacks
+    // Tier 2: CSS selectors + aria-label (ca EN va VI)
     if (!followBtn) {
       for (const sel of [
         '[data-test-id="follow-button"]',
@@ -146,25 +150,42 @@ export class PinterestWorker extends BaseWorker {
         '[data-test-id="profile-follow-button"]',
         'button[aria-label="Follow"]',
         'button[aria-label*="Follow"]',
+        'button[aria-label="Theo doi"]',
+        'button[aria-label*="Theo doi"]',
       ]) {
         followBtn = await this.page.$(sel);
         if (followBtn) break;
       }
     }
 
-    // Scan tat ca button
+    // Tier 3: scan tat ca button — kiem tra ca tieng Viet "Theo doi"
     if (!followBtn) {
       const buttons = await this.page.$$('button');
       for (const btn of buttons) {
         const txt = await btn.innerText().catch(() => '');
-        if (txt.trim().toLowerCase() === 'follow') { followBtn = btn; break; }
+        const norm = txt.trim().normalize('NFD').toLowerCase()
+          .replace(/đ/g, 'd').replace(/[̀-ͯ]/g, '');
+        if (norm === 'follow' || norm === 'theo doi') {
+          followBtn = btn;
+          break;
+        }
       }
     }
 
-    if (!followBtn) throw new Error('Khong tim thay nut Follow');
+    if (!followBtn) {
+      // Debug: log ten tat ca buttons de phat hien van de
+      const allBtns = await this.page.$$('button');
+      const names = [];
+      for (const b of allBtns.slice(0, 25)) {
+        const t = await b.innerText().catch(() => '');
+        if (t.trim()) names.push(t.trim().slice(0, 20));
+      }
+      logger.debug(this.platform, `Buttons tren trang: ${names.join(' | ')}`);
+      throw new Error('Khong tim thay nut Follow');
+    }
 
     const text = await followBtn.innerText().catch(() => '');
-    if (/following/i.test(text)) {
+    if (/following|dang theo|Đang theo/i.test(text)) {
       logger.info(this.platform, `Da follow roi: ${profileUrl}`);
       return;
     }
