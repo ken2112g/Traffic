@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TrafficTool Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-name">TrafficTool</div>
+      <div class="brand-sub">Đa nền tảng</div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-item" data-view="overview" onclick="navigate('overview')">
+        <span class="nav-icon">&#9672;</span> Tổng quan
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Nền tảng</div>
+      <div class="nav-item" data-view="pinterest" onclick="navigate('pinterest')">
+        <span class="nav-icon" style="color:var(--pin)">&#10084;</span> Pinterest
+        <span class="platform-dot" style="background:var(--pin)"></span>
+      </div>
+      <div class="nav-item" data-view="instagram" onclick="navigate('instagram')">
+        <span class="nav-icon" style="color:var(--ig)">&#9681;</span> Instagram
+        <span class="platform-dot" style="background:var(--ig)"></span>
+      </div>
+      <div class="nav-item" data-view="tiktok" onclick="navigate('tiktok')">
+        <span class="nav-icon" style="color:var(--tt)">&#9834;</span> TikTok
+        <span class="platform-dot" style="background:var(--tt)"></span>
+      </div>
+      <div class="nav-item" data-view="youtube" onclick="navigate('youtube')">
+        <span class="nav-icon" style="color:var(--yt)">&#9654;</span> YouTube
+        <span class="platform-dot" style="background:var(--yt)"></span>
+      </div>
+      <div class="nav-item" data-view="twitter" onclick="navigate('twitter')">
+        <span class="nav-icon" style="color:var(--tw)">&#10005;</span> Twitter/X
+        <span class="platform-dot" style="background:var(--tw)"></span>
+      </div>
+      <div class="nav-item" data-view="facebook" onclick="navigate('facebook')">
+        <span class="nav-icon" style="color:var(--fb)">&#402;</span> Facebook
+        <span class="platform-dot" style="background:var(--fb)"></span>
+      </div>
+    </div>
+
+    <div class="nav-section" style="margin-top:auto">
+      <div class="nav-label">Hệ thống</div>
+      <div class="nav-item" data-view="proxies" onclick="navigate('proxies')">
+        <span class="nav-icon">&#8644;</span> Proxy
+      </div>
+      <div class="nav-item" data-view="logs" onclick="navigate('logs')">
+        <span class="nav-icon">&#8801;</span> Nhật ký
+      </div>
+      <div class="nav-item" data-view="settings" onclick="navigate('settings')">
+        <span class="nav-icon">&#9881;</span> Cài đặt
+      </div>
+      <div class="nav-item" data-view="system" onclick="navigate('system')">
+        <span class="nav-icon">&#9829;</span> Sức khỏe
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="content" id="content"></div>
+  </div>
+</div>
+
+<!-- Campaign drawer -->
+<div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <div class="drawer-title">Chiến dịch mới</div>
+    <button class="btn btn--ghost btn--xs" onclick="closeDrawer()">&#10005;</button>
+  </div>
+  <div class="drawer-body">
+    <form id="campaign-form" onsubmit="submitCampaign(event)">
+      <div class="form-group">
+        <label class="form-label">Tên chiến dịch *</label>
+        <input class="form-input" name="name" placeholder="Buff tháng 1 – Pinterest" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nền tảng *</label>
+        <select class="form-input" name="platform" id="campaign-platform" onchange="updateActionCheckboxes(this.value)" required>
+          <option value="">Chọn nền tảng…</option>
+          <option value="pinterest">Pinterest</option>
+          <option value="instagram">Instagram</option>
+          <option value="tiktok">TikTok</option>
+          <option value="youtube">YouTube</option>
+          <option value="twitter">Twitter/X</option>
+          <option value="facebook">Facebook</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tài khoản đích *</label>
+        <input class="form-input" name="target_account" placeholder="username (không có @)" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">URL mục tiêu</label>
+        <input class="form-input" name="target_url" type="url" placeholder="https://…">
+        <div class="form-hint">Để trống sẽ tự tạo từ username</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hành động *</label>
+        <div id="action-boxes" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+          <span style="font-size:12px;color:var(--muted)">Chọn nền tảng trước</span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Lịch chạy</label>
+        <input class="form-input" name="schedule" placeholder="auto  hoặc  0 8 * * *">
+        <div class="form-hint">&quot;auto&quot; = 8 giờ sáng mỗi ngày. Cron expression để tùy chỉnh.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tài khoản</label>
+        <select class="form-input" name="account_ids">
+          <option value="all">Tất cả tài khoản phụ</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+        <button type="button" class="btn btn--secondary" onclick="closeDrawer()">Hủy</button>
+        <button type="submit" class="btn btn--primary">Tạo chiến dịch</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal -->
+<dialog class="modal" id="modal">
+  <div class="modal-header">
+    <div class="modal-title" id="modal-title"></div>
+    <button class="modal-close btn btn--ghost" onclick="closeModal()">&#10005;</button>
+  </div>
+  <div class="modal-body" id="modal-body"></div>
+  <div class="modal-footer" id="modal-footer"></div>
+</dialog>
+
+<!-- Toast container -->
+<div class="toast-wrap" id="toasts"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

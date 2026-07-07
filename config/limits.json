@@ -1,0 +1,59 @@
+{
+  "pinterest": {
+    "follow":  25,
+    "unfollow": 25,
+    "like":    50,
+    "repin":   30,
+    "comment": 8,
+    "delayMin": 8000,
+    "delayMax": 45000,
+    "activeHours": [7, 23]
+  },
+  "instagram": {
+    "follow":  20,
+    "unfollow": 20,
+    "like":    40,
+    "comment": 5,
+    "story_view": 80,
+    "delayMin": 12000,
+    "delayMax": 60000,
+    "activeHours": [7, 23]
+  },
+  "tiktok": {
+    "follow":  30,
+    "like":    60,
+    "comment": 8,
+    "view":    200,
+    "share":   10,
+    "delayMin": 10000,
+    "delayMax": 50000,
+    "activeHours": [7, 23]
+  },
+  "youtube": {
+    "subscribe": 10,
+    "like":      30,
+    "comment":   8,
+    "view":      50,
+    "delayMin": 15000,
+    "delayMax": 90000,
+    "activeHours": [8, 22]
+  },
+  "twitter": {
+    "follow":   30,
+    "like":     50,
+    "retweet":  20,
+    "comment":  10,
+    "delayMin": 10000,
+    "delayMax": 60000,
+    "activeHours": [7, 23]
+  },
+  "facebook": {
+    "follow":  15,
+    "like":    30,
+    "comment": 5,
+    "share":   8,
+    "delayMin": 15000,
+    "delayMax": 90000,
+    "activeHours": [7, 23]
+  }
+}

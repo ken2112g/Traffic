@@ -1,0 +1,28 @@
+﻿{
+  "name": "traffic-tool",
+  "version": "1.0.0",
+  "description": "Multi-platform social media traffic tool",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "ui": "node src/ui/server.js",
+    "ui:dev": "node --watch src/ui/server.js",
+    "cli": "node scripts/cli.js",
+    "run-once": "node scripts/run-once.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "bullmq": "^5.79.2",
+    "chalk": "^5.6.2",
+    "cron": "^4.4.0",
+    "dotenv": "^17.4.2",
+    "express": "^4.22.2",
+    "ioredis": "^5.11.1",
+    "playwright": "^1.50.0",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "undici": "^7.0.0"
+  }
+}

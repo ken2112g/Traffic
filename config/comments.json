@@ -1,0 +1,58 @@
+﻿{
+  "pinterest": {
+    "default": [
+      "Love this! 😍", "Beautiful!", "So inspiring!", "Amazing idea!",
+      "This is gorgeous 🌟", "Wow, stunning!", "Great pin!", "Absolutely love this",
+      "So pretty!", "This is wonderful!", "Such a great idea 💡",
+      "Pinning this for later!", "This made my day ✨", "Gorgeous, saved!",
+      "This is so helpful 🙏", "Definitely trying this!", "Bookmarked! 🔖",
+      "Can't stop looking at this 😍", "Adding to my board!", "Pure perfection 💫"
+    ],
+    "home": [
+      "Gorgeous for home decor! 🏡", "Adding this to my wishlist!", "Dream home! 😍",
+      "This is exactly what I need for my room", "Stunning interior!", "Home goals 🏠"
+    ],
+    "fashion": [
+      "Obsessed with this look! 😍", "Stunning style!", "Need this in my wardrobe!",
+      "Fashion goals! 💅", "This outfit is everything!", "Style inspo! ✨"
+    ],
+    "food": [
+      "This looks so delicious! 😋", "Recipe please! 🍽️", "Making this tonight!",
+      "Yummy! 🤤", "This is making me hungry!", "Saving this recipe! 📌"
+    ]
+  },
+  "instagram": {
+    "default": [
+      "Love this! ❤️", "Beautiful shot! 📸", "Amazing! 🙌", "So cool!",
+      "This is incredible ✨", "Absolutely stunning! 😍", "Goals! 🔥",
+      "This is everything ❤️", "Wow! Just wow!", "Keep it up! 💪",
+      "This is perfection! 🌟", "Obsessed with this!", "So talented! 👏",
+      "Incredible work! 🙌", "Always inspiring! ✨", "Saved! 🔖",
+      "This is why I love this account! ❤️", "Pure art! 🎨"
+    ],
+    "food": [
+      "This looks incredible! 😍🍽️", "Recipe please! 🙏", "Food goals! 😋",
+      "Making this ASAP!", "Drooling right now 🤤", "Delicious! 😋"
+    ],
+    "travel": [
+      "Dream destination! ✈️", "Adding this to my bucket list! 🗺️",
+      "Wanderlust! 🌍", "This place looks magical!", "I need to go here! 😍",
+      "Paradise found! 🏝️"
+    ],
+    "fitness": [
+      "So inspiring! 💪", "Goals! 🔥", "Hard work pays off!",
+      "Motivation level: 1000! 🙌", "Keep crushing it! 💯", "Beast mode! 💪"
+    ]
+  },
+  "tiktok": {
+    "default": [
+      "This is amazing! 🔥", "So creative! 😍", "Can't stop watching! 😂",
+      "This deserves more views! 👏", "Literally obsessed with this",
+      "This made my day! ✨", "You're so talented! 🌟", "More please! 🙏",
+      "POV: me watching this 10 times 😂", "This content is everything!",
+      "Underrated account! 👏", "Why is this so satisfying? 😍",
+      "The algorithm blessed me with this! 🙌", "Sending this to everyone I know 😂",
+      "Ok but how? 🤯", "Deserves to go viral! 🔥", "Best thing I've seen today! ✨"
+    ]
+  }
+}
