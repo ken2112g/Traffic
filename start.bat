@@ -62,7 +62,7 @@ if not errorlevel 1 (
 :: 3) Tim redis-server.exe trong thu muc redis\
 if exist "redis\redis-server.exe" (
     echo  [INFO] Khoi dong Redis portable...
-    start "Redis Server" /min cmd /c ""%~dp0redis\redis-server.exe" --port 6379 --loglevel warning"
+    start "Redis Server" /min cmd /c "redis\redis-server.exe --port 6379 --loglevel warning"
     timeout /t 2 /nobreak >nul
     netstat -an 2>nul | find "6379" | find "LISTENING" >nul 2>&1
     if not errorlevel 1 (
