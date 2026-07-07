@@ -1,4 +1,4 @@
-﻿
+
 /* === Constants === */
 const PLATFORMS = ['pinterest','instagram','tiktok','youtube','twitter','facebook'];
 const PLATFORM_ACTIONS = {
