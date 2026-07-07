@@ -183,6 +183,10 @@ export class Scheduler {
       for (const action of actions) {
         if (!platformLimits[action]) continue;
         if (!shouldScheduleAction(action)) continue;
+        // follow luon dung profile URL — khong dung pin URL (campaign.target_url)
+        const actionUrl = action === 'follow'
+          ? buildTargetUrl(platform, campaign.target_account)
+          : targetUrl;
         const times = this._distributeInWindow(1, fromHour, toHour);
         for (const scheduledAt of times) {
           const delayMs = scheduledAt - Date.now();
@@ -191,8 +195,8 @@ export class Scheduler {
           this.db.prepare(`
             INSERT INTO tasks (id, campaign_id, account_id, platform, action, target_url, status, scheduled_at)
             VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
-          `).run(taskId, campaignId, account.id, platform, action, targetUrl, new Date(scheduledAt).toISOString());
-          await enqueueTask({ taskId, campaignId, accountId: account.id, platform, action, targetUrl, delayMs });
+          `).run(taskId, campaignId, account.id, platform, action, actionUrl, new Date(scheduledAt).toISOString());
+          await enqueueTask({ taskId, campaignId, accountId: account.id, platform, action, targetUrl: actionUrl, delayMs });
           totalScheduled++;
         }
       }
@@ -247,12 +251,16 @@ export class Scheduler {
     let count = 0;
     for (const account of accounts) {
       for (const action of actions) {
+        // follow luon dung profile URL
+        const actionUrl = action === 'follow'
+          ? buildTargetUrl(campaign.platform, campaign.target_account)
+          : targetUrl;
         const taskId = randomUUID();
         this.db.prepare(`
           INSERT INTO tasks (id, campaign_id, account_id, platform, action, target_url, status, scheduled_at)
           VALUES (?, ?, ?, ?, ?, ?, 'pending', datetime('now'))
-        `).run(taskId, campaignId, account.id, campaign.platform, action, targetUrl);
-        await enqueueTask({ taskId, campaignId, accountId: account.id, platform: campaign.platform, action, targetUrl, delayMs: count * 5000 });
+        `).run(taskId, campaignId, account.id, campaign.platform, action, actionUrl);
+        await enqueueTask({ taskId, campaignId, accountId: account.id, platform: campaign.platform, action, targetUrl: actionUrl, delayMs: count * 5000 });
         count++;
       }
     }

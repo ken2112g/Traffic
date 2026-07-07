@@ -21,7 +21,7 @@ export class PinterestWorker extends BaseWorker {
 
   async _isLoggedIn() {
     try {
-      await this.page.goto('https://www.pinterest.com/', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await this.page.goto('https://www.pinterest.com/', { waitUntil: 'domcontentloaded', timeout: 45000 });
       await this.randomDelay(800, 1500);
       const url = this.page.url();
       return !url.includes('/login') && !url.includes('/signup');
@@ -29,7 +29,7 @@ export class PinterestWorker extends BaseWorker {
   }
 
   async login(account) {
-    await this.page.goto('https://www.pinterest.com/login/', { waitUntil: 'domcontentloaded' });
+    await this.page.goto('https://www.pinterest.com/login/', { waitUntil: 'domcontentloaded', timeout: 45000 });
     await this.randomDelay(1500, 3000);
     await this._humanMouseMove();
     await this.humanType('input[id="email"]', account.username);
@@ -38,7 +38,7 @@ export class PinterestWorker extends BaseWorker {
     await this.randomDelay(700, 1400);
     await this._humanMouseMove();
     await this.page.click('button[type="submit"]');
-    await this.page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 });
+    await this.page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 45000 });
     await this.randomDelay(2500, 5000);
     const url = this.page.url();
     if (url.includes('/login') || url.includes('/signup'))
@@ -62,7 +62,7 @@ export class PinterestWorker extends BaseWorker {
 
   async _warmup() {
     logger.debug(this.platform, 'Bat dau warmup...');
-    await this.page.goto('https://www.pinterest.com/', { waitUntil: 'domcontentloaded' });
+    await this.page.goto('https://www.pinterest.com/', { waitUntil: 'domcontentloaded', timeout: 45000 });
     await this.randomDelay(2500, 5000);
     await this._dismissPopups();
 
@@ -150,7 +150,7 @@ export class PinterestWorker extends BaseWorker {
 
   async _follow(profileUrl) {
     logger.debug(this.platform, `Navigate den profile: ${profileUrl}`);
-    await this.page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
+    await this.page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await this.randomDelay(2000, 4500);
 
     // Dam bao ve dau trang
@@ -529,7 +529,7 @@ export class PinterestWorker extends BaseWorker {
 
   async _collectPinUrls(targetUrl, count) {
     if (targetUrl.includes('/pin/')) return [targetUrl];
-    await this.page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
+    await this.page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await this.randomDelay(2500, 5500);
     await this.naturalScroll(2);
     const pins = await this.page.$$('[data-test-id="pin"]');
