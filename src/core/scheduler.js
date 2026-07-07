@@ -20,6 +20,11 @@ function buildTargetUrl(platform, username) {
   return `https://www.pinterest.com/${username}/`;
 }
 
+export function shouldScheduleAction(action, rng = Math.random) {
+  if (action === 'repin' || action === 'comment') return rng() < 0.5;
+  return true;
+}
+
 export class Scheduler {
   constructor() {
     this.db            = getDb();
@@ -177,6 +182,7 @@ export class Scheduler {
 
       for (const action of actions) {
         if (!platformLimits[action]) continue;
+        if (!shouldScheduleAction(action)) continue;
         const times = this._distributeInWindow(1, fromHour, toHour);
         for (const scheduledAt of times) {
           const delayMs = scheduledAt - Date.now();
@@ -306,3 +312,4 @@ export class Scheduler {
 }
 
 export const scheduler = new Scheduler();
+
