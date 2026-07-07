@@ -213,26 +213,25 @@ export class PinterestWorker extends BaseWorker {
       throw new Error('Khong tim thay nut Follow');
     }
 
-    // Nhin chỗ khac mot chut truoc khi click
-    await this.page.mouse.move(
-      vp.width / 2 + (Math.random() - 0.5) * 200,
-      vp.height / 2 + Math.random() * 100,
-      { steps: 10 }
+    // Nhin chỗ khac truoc (nguoi that thuong scan trang truoc khi action)
+    await this._bezierMoveTo(
+      vp.width / 2 + (Math.random() - 0.5) * 250,
+      vp.height / 2 + Math.random() * 120
     );
     await this.randomDelay(700, 2000);
 
-    await followBtn.hover();
-    await this.randomDelay(600, 1800); // do du tren nut
+    // Hover vao Follow voi bezier — khong di thang
+    await this._naturalHover(followBtn);
+    await this.randomDelay(600, 1800);
 
-    // 30% co them buoc do du (move ra roi quay lai)
+    // 30%: do du them (mat nguoi thuong "nhay" ra roi quay lai)
     if (Math.random() > 0.7) {
-      await this.page.mouse.move(
-        vp.width / 2 + (Math.random() - 0.5) * 80,
-        90 + Math.random() * 60,
-        { steps: 5 }
+      await this._bezierMoveTo(
+        vp.width / 2 + (Math.random() - 0.5) * 100,
+        95 + Math.random() * 70
       );
       await this.randomDelay(400, 1000);
-      await followBtn.hover();
+      await this._naturalHover(followBtn);
       await this.randomDelay(300, 600);
     }
 
@@ -270,7 +269,7 @@ export class PinterestWorker extends BaseWorker {
     }
   }
 
-  // ─── Like: vao tung pin xem that su roi like ────────────────────────────────
+  // ─── Like: xem anh theo Z-pattern, doc mo ta F-pattern, hesitate truoc click ──
 
   async _likePins(profileUrl) {
     const likeCount = 2 + Math.floor(Math.random() * 3);
@@ -282,46 +281,46 @@ export class PinterestWorker extends BaseWorker {
       logger.debug(this.platform, `Xem pin: ${pinUrl}`);
 
       await this.page.goto(pinUrl, { waitUntil: 'domcontentloaded' });
-      await this.randomDelay(3000, 7000); // an tuong dau tien voi anh
+      await this.randomDelay(2000, 4500); // trang load xong, mat bat dau quan sat
 
       const vp = this.page.viewportSize() || { width: 1366, height: 768 };
-      const imgX = 80 + Math.random() * Math.min(380, vp.width / 2 - 60);
+      // Pinterest closeup: anh chiem khoang 45% chieu rong ben trai
+      const imgW = Math.min(vp.width * 0.45, 560);
+      const imgH = Math.min(vp.height * 0.7, 520);
 
-      // Nhin anh (mouse di chuyen theo hinh)
-      await this.page.mouse.move(
-        imgX,
-        80 + Math.random() * (vp.height / 2),
-        { steps: 14 + Math.floor(Math.random() * 10) }
-      );
-      await this.randomDelay(2000, 5500); // nhin anh
+      // Quan sat anh bang Z-pattern (cach mat nguoi nhin anh)
+      await this._scanImage(20, 60, imgW, imgH);
+      await this.randomDelay(1500, 4000); // long pause — an tuong voi anh
 
-      // Di chuot theo phan khac cua anh
-      await this.page.mouse.move(
-        imgX + (Math.random() - 0.5) * 100,
-        100 + Math.random() * (vp.height / 2 - 80),
-        { steps: 6 + Math.floor(Math.random() * 6) }
-      );
-      await this.randomDelay(1000, 3500);
+      // Di chuot sang phan mo ta (ben phai tren Pinterest)
+      const descX = imgW + 60 + Math.random() * 80;
+      const descY = 80 + Math.random() * 60;
+      await this._bezierMoveTo(descX, descY);
+      await this.randomDelay(500, 1500);
 
-      // Cuon xuong doc mo ta
-      await this.page.mouse.wheel(0, 100 + Math.random() * 160);
-      await this.randomDelay(2000, 5000); // doc mo ta / tags
+      // Cuon xuong doc mo ta bang F-pattern
+      await this._scrollEased(90 + Math.random() * 120);
+      await this._readText(descX, descY + 40, 200);
+      await this.randomDelay(1500, 4000);
 
-      // 55%: doc them comment hoac related pins
+      // 55%: tiep tuc doc comment
       if (Math.random() > 0.45) {
-        await this.page.mouse.wheel(0, 80 + Math.random() * 140);
-        await this.randomDelay(1800, 5000); // doc comment
-        await this.page.mouse.move(
-          vp.width / 2 + 30 + Math.random() * 200,
-          180 + Math.random() * 200,
-          { steps: 7 }
-        );
-        await this.randomDelay(1200, 3500);
+        await this._scrollEased(70 + Math.random() * 100);
+        const cmtX = imgW + 50 + Math.random() * 100;
+        await this._bezierMoveTo(cmtX, 200 + Math.random() * 150);
+        await this._microSaccade(cmtX, 220 + Math.random() * 100, 2);
+        await this.randomDelay(1500, 4500);
       }
 
-      // Cuon nguoc len de thay nut like
-      await this.page.mouse.wheel(0, -(130 + Math.random() * 170));
-      await this.randomDelay(1200, 3000);
+      // Cuon nguoc len xem anh lan nua truoc khi like
+      await this._scrollEased(100 + Math.random() * 130, -1);
+      await this.randomDelay(1000, 2500);
+
+      // 30% nhin lai anh lan nua (nguoi that hay lam vay)
+      if (Math.random() > 0.7) {
+        await this._scanImage(20, 60, imgW * 0.6, imgH * 0.5);
+        await this.randomDelay(800, 2500);
+      }
 
       // Tim nut like
       let likeBtn = null;
@@ -345,35 +344,23 @@ export class PinterestWorker extends BaseWorker {
       const pressed = await likeBtn.getAttribute('aria-pressed').catch(() => null);
       if (pressed === 'true') { logger.debug(this.platform, 'Pin da like roi'); continue; }
 
-      // Nhin chỗ khac truoc (nhu dang doc gi do, chua chu y toi nut like)
-      await this.page.mouse.move(
-        vp.width / 2 + 40 + Math.random() * 160,
-        90 + Math.random() * 160,
-        { steps: 8 }
+      // Nhin chỗ khac truoc — nhu dang suy nghi, chua quyet dinh like
+      await this._bezierMoveTo(
+        imgW + 80 + Math.random() * 150,
+        100 + Math.random() * 120
       );
-      await this.randomDelay(500, 1800);
+      await this.randomDelay(600, 2000);
 
-      await likeBtn.hover();
-      await this.randomDelay(500, 1500); // do du tren nut
-
-      // 20%: do du them (move ra roi quay lai)
-      if (Math.random() > 0.8) {
-        await this.page.mouse.move(
-          vp.width / 2 + 70 + Math.random() * 60,
-          110 + Math.random() * 40,
-          { steps: 4 }
-        );
-        await this.randomDelay(300, 800);
-        await likeBtn.hover();
-        await this.randomDelay(200, 500);
-      }
+      // Hover vao nut voi bezier (khong thang)
+      await this._naturalHover(likeBtn);
+      await this.randomDelay(500, 1500);
 
       await likeBtn.click();
-      await this.randomDelay(2000, 5000);
+      await this.randomDelay(1800, 4500);
 
       successCount++;
       logger.info(this.platform, `Da like: ${pinUrl}`);
-      if (i < likeCount - 1) await this.randomDelay(7000, 17000);
+      if (i < likeCount - 1) await this.randomDelay(6000, 16000);
     }
     logger.info(this.platform, `Da like ${successCount} pin tu: ${profileUrl}`);
   }
@@ -430,6 +417,65 @@ export class PinterestWorker extends BaseWorker {
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+  // ─── Image & text reading simulation ───────────────────────────────────────
+
+  // Z-pattern image scan: top-left → top-right → diagonal → bottom-left → bottom-right
+  // Matches eye-tracking research on how people view images online
+  async _scanImage(imgX, imgY, imgW, imgH) {
+    const vp  = this.page.viewportSize() || { width: 1366, height: 768 };
+    const bx  = Math.max(20, imgX);
+    const by  = Math.max(20, imgY);
+    const bw  = Math.min(imgW, vp.width  - bx - 20);
+    const bh  = Math.min(imgH, vp.height - by - 20);
+
+    // 5-6 scan points in rough Z pattern
+    const pts = [
+      [bx + bw * (0.08 + Math.random() * 0.08),  by + bh * (0.10 + Math.random() * 0.10)],  // top-left
+      [bx + bw * (0.45 + Math.random() * 0.20),  by + bh * (0.12 + Math.random() * 0.08)],  // top-mid
+      [bx + bw * (0.72 + Math.random() * 0.22),  by + bh * (0.12 + Math.random() * 0.10)],  // top-right
+      [bx + bw * (0.25 + Math.random() * 0.30),  by + bh * (0.40 + Math.random() * 0.18)],  // center (diagonal)
+      [bx + bw * (0.08 + Math.random() * 0.12),  by + bh * (0.62 + Math.random() * 0.18)],  // bottom-left
+      [bx + bw * (0.50 + Math.random() * 0.38),  by + bh * (0.68 + Math.random() * 0.22)],  // bottom-right
+    ];
+
+    // Skip 1-2 points randomly (people dont always scan fully)
+    const skip = new Set();
+    if (Math.random() > 0.6) skip.add(Math.floor(Math.random() * pts.length));
+    if (Math.random() > 0.75) skip.add(Math.floor(Math.random() * pts.length));
+
+    for (let i = 0; i < pts.length; i++) {
+      if (skip.has(i)) continue;
+      const [px, py] = pts[i];
+      await this._bezierMoveTo(px, py);
+      const dwellMs = 180 + Math.floor(Math.random() * 550);
+      await this.page.waitForTimeout(dwellMs);
+      // 35%: micro-saccade on interesting points
+      if (Math.random() > 0.65) await this._microSaccade(px, py, 2);
+    }
+  }
+
+  // F-pattern text reading: full first line, shorter second, quick scan of rest
+  async _readText(cx, cy, lineW = 200) {
+    const half = lineW / 2;
+    const lineH = 16 + Math.floor(Math.random() * 6);
+    // Line 1: full read left → right
+    await this._bezierMoveTo(cx - half * 0.85, cy);
+    await this.page.waitForTimeout(200 + Math.floor(Math.random() * 400));
+    await this._bezierMoveTo(cx + half * (0.6 + Math.random() * 0.3), cy);
+    await this.page.waitForTimeout(150 + Math.floor(Math.random() * 350));
+    // Line 2: partial read
+    await this._bezierMoveTo(cx - half * 0.8, cy + lineH);
+    await this.page.waitForTimeout(150 + Math.floor(Math.random() * 300));
+    await this._bezierMoveTo(cx + half * (0.2 + Math.random() * 0.4), cy + lineH);
+    await this.page.waitForTimeout(200 + Math.floor(Math.random() * 350));
+    // Line 3+: quick left-anchor scan
+    if (Math.random() > 0.4) {
+      await this._bezierMoveTo(cx - half * 0.6, cy + lineH * 2);
+      await this.page.waitForTimeout(100 + Math.floor(Math.random() * 250));
+      if (Math.random() > 0.5) await this._microSaccade(cx - half * 0.3, cy + lineH * 2, 2);
+    }
+  }
 
   // Tim Follow button bang JS trong browser -- chay normalization Unicode chinh xac
   async _findFollowButton() {

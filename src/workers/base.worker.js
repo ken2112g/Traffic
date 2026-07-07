@@ -15,6 +15,8 @@ export class BaseWorker {
     this.browser  = null;
     this.context  = null;
     this.page     = null;
+    this._mouseX  = 300;   // tracked so bezier has a real starting point
+    this._mouseY  = 400;
   }
 
   async launch(accountId) {
@@ -157,13 +159,13 @@ export class BaseWorker {
 
   async naturalScroll(times = 4) {
     for (let i = 0; i < times; i++) {
-      const amount = 200 + Math.random() * 500;
-      const steps  = 3 + Math.floor(Math.random() * 5);
-      for (let s = 0; s < steps; s++) {
-        await this.page.mouse.wheel(0, amount / steps);
-        await this.randomDelay(60, 180);
+      const amount = 260 + Math.random() * 440;
+      await this._scrollEased(amount);
+      await this.randomDelay(1000, 4000);
+      if (Math.random() > 0.7) {              // 30%: scroll back a bit (re-reading)
+        await this._scrollEased(50 + Math.random() * 110, -1);
+        await this.randomDelay(300, 1000);
       }
-      await this.randomDelay(1200, 4500);
     }
   }
 
@@ -171,8 +173,76 @@ export class BaseWorker {
     const vp = this.page.viewportSize() || { width: 1366, height: 768 };
     const x  = 150 + Math.random() * (vp.width  - 300);
     const y  = 100 + Math.random() * (vp.height - 200);
-    await this.page.mouse.move(x, y, { steps: 8 + Math.floor(Math.random() * 15) });
-    await this.randomDelay(200, 600);
+    await this._bezierMoveTo(x, y);
+    await this.randomDelay(150, 500);
+  }
+
+  // ─── Advanced human simulation ──────────────────────────────────────────────
+
+  // Cubic Bezier mouse movement: curved path + ease-in/out speed + sub-pixel jitter
+  // Humans never move in straight lines — bezier + sin() speed profile matches real data
+  async _bezierMoveTo(targetX, targetY) {
+    const sx = this._mouseX, sy = this._mouseY;
+    // Two random control points to create a natural arc
+    const cp1x = sx + (targetX - sx) * (0.2 + Math.random() * 0.3) + (Math.random() - 0.5) * 120;
+    const cp1y = sy + (targetY - sy) * (0.05 + Math.random() * 0.3) + (Math.random() - 0.5) * 90;
+    const cp2x = sx + (targetX - sx) * (0.6 + Math.random() * 0.25) + (Math.random() - 0.5) * 80;
+    const cp2y = sy + (targetY - sy) * (0.55 + Math.random() * 0.3) + (Math.random() - 0.5) * 70;
+    const dist  = Math.hypot(targetX - sx, targetY - sy);
+    const steps = Math.max(12, Math.min(55, Math.floor(dist / 7)));
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const x = (1-t)**3*sx + 3*(1-t)**2*t*cp1x + 3*(1-t)*t**2*cp2x + t**3*targetX;
+      const y = (1-t)**3*sy + 3*(1-t)**2*t*cp1y + 3*(1-t)*t**2*cp2y + t**3*targetY;
+      await this.page.mouse.move(x + (Math.random()-0.5)*1.3, y + (Math.random()-0.5)*1.3);
+      const speed = Math.sin(t * Math.PI);      // slow at ends, fast in middle
+      await this.page.waitForTimeout(Math.max(4, Math.floor(26 - speed * 18)));
+    }
+    await this.page.mouse.move(targetX, targetY);
+    this._mouseX = targetX;
+    this._mouseY = targetY;
+  }
+
+  // Trackpad/wheel momentum: sin curve so scroll starts slow, peaks, then decelerates
+  async _scrollEased(totalPx, direction = 1) {
+    const segs = 10 + Math.floor(Math.random() * 8);
+    for (let i = 0; i < segs; i++) {
+      const momentum = Math.sin((i / segs) * Math.PI);
+      const chunk    = (totalPx / segs) * (0.3 + momentum * 1.4);
+      await this.page.mouse.wheel(0, chunk * direction);
+      await this.page.waitForTimeout(10 + Math.floor(22 * (1 - momentum * 0.6)));
+    }
+  }
+
+  // Micro-saccade: tiny fixation jitter when eyes "settle" on something
+  // Human eyes make 3-5 small involuntary movements per second while reading
+  async _microSaccade(baseX, baseY, count = 3) {
+    for (let i = 0; i < count; i++) {
+      const dx = (Math.random() - 0.5) * 28;
+      const dy = (Math.random() - 0.5) * 18;
+      await this.page.mouse.move(baseX + dx, baseY + dy, { steps: 2 });
+      await this.page.waitForTimeout(70 + Math.floor(Math.random() * 210));
+    }
+    await this.page.mouse.move(baseX, baseY, { steps: 2 });
+    this._mouseX = baseX;
+    this._mouseY = baseY;
+  }
+
+  // Hover on element with natural approach: bezier move → micro-jitter → settle → optional correction
+  async _naturalHover(element) {
+    const box = await element.boundingBox().catch(() => null);
+    if (!box) { await element.hover(); return; }
+    const cx = box.x + box.width  * (0.35 + Math.random() * 0.3);
+    const cy = box.y + box.height * (0.35 + Math.random() * 0.3);
+    await this._bezierMoveTo(cx + (Math.random()-0.5)*8, cy + (Math.random()-0.5)*6);
+    await this.page.waitForTimeout(60 + Math.floor(Math.random() * 180));
+    // 25%: slight correction (overshoot then fix)
+    if (Math.random() > 0.75) {
+      await this.page.mouse.move(cx + (Math.random()-0.5)*5, cy + (Math.random()-0.5)*5, { steps: 3 });
+      await this.page.waitForTimeout(50 + Math.floor(Math.random() * 100));
+    }
+    await this.page.mouse.move(cx, cy, { steps: 2 });
+    this._mouseX = cx; this._mouseY = cy;
   }
 
   async _humanTypeWithMistake(text) {
