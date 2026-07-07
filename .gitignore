@@ -22,3 +22,9 @@ logs/
 
 # OS
 Thumbs.db
+# Redis portable binaries
+redis/
+
+# Temp files
+cd
+monitor_code.txt
