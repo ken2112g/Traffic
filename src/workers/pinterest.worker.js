@@ -14,7 +14,7 @@ function _pickComment(platform, category = 'default') {
 export class PinterestWorker extends BaseWorker {
   constructor() { super('pinterest'); }
 
-  // Pinterest can SVG de render icon heart/follow — chi block font va video
+  // Cho phep SVG de icon heart/follow render dung
   async _blockMedia() {
     await this.page.route('**/*.{woff,woff2,ttf,mp4,webm}', r => r.abort());
   }
@@ -42,7 +42,7 @@ export class PinterestWorker extends BaseWorker {
     await this.randomDelay(2500, 5000);
     const url = this.page.url();
     if (url.includes('/login') || url.includes('/signup'))
-      throw new Error('Dang nhap Pinterest that bai — sai thong tin hoac bi checkpoint');
+      throw new Error('Dang nhap Pinterest that bai -- sai thong tin hoac bi checkpoint');
     await this._dismissPopups();
     logger.info(this.platform, `Dang nhap thanh cong: ${account.username}`);
   }
@@ -54,36 +54,66 @@ export class PinterestWorker extends BaseWorker {
       case 'like':    return this._likePins(targetUrl);
       case 'repin':   return this._repinPin(targetUrl);
       case 'comment': return this._commentPin(targetUrl);
-      default: throw new Error(`Pinterest: action khong ho tro — "${action}"`);
+      default: throw new Error(`Pinterest: action khong ho tro -- "${action}"`);
     }
   }
 
-  // Warmup: duyet home feed tu nhien
+  // ─── Warmup: duyet feed tu nhien truoc khi lam gi ────────────────────────────
+
   async _warmup() {
     logger.debug(this.platform, 'Bat dau warmup...');
     await this.page.goto('https://www.pinterest.com/', { waitUntil: 'domcontentloaded' });
-    await this.randomDelay(3000, 6000);
+    await this.randomDelay(2500, 5000);
     await this._dismissPopups();
 
-    const scrollCount = 3 + Math.floor(Math.random() * 4);
-    for (let i = 0; i < scrollCount; i++) {
-      await this.naturalScroll(1);
-      await this.randomDelay(2000, 5000); // nhin feed
+    const vp = this.page.viewportSize() || { width: 1366, height: 768 };
 
-      if (Math.random() > 0.45) {
-        const pins = await this.page.$('[data-test-id="pin"]');
-        if (pins) {
-          const allPins = await this.page.$$('[data-test-id="pin"]');
-          const pin = allPins[Math.floor(Math.random() * Math.min(allPins.length, 6))];
+    // Nhin man hinh lan dau (mouse o giua)
+    await this.page.mouse.move(
+      vp.width / 2 + (Math.random() - 0.5) * 300,
+      200 + Math.random() * 200,
+      { steps: 15 + Math.floor(Math.random() * 10) }
+    );
+    await this.randomDelay(1500, 4000);
+
+    const scrollCount = 3 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < scrollCount; i++) {
+      const r = Math.random();
+      if (r < 0.25) {
+        // Cuon cham - dang nhin ky pin nao do
+        await this.page.mouse.wheel(0, 100 + Math.random() * 180);
+        await this.randomDelay(2500, 6000);
+        await this.page.mouse.move(
+          150 + Math.random() * (vp.width - 300),
+          200 + Math.random() * 300,
+          { steps: 8 }
+        );
+        await this.randomDelay(1500, 4000);
+      } else if (r < 0.65) {
+        // Cuon vua - luot feed binh thuong
+        await this.naturalScroll(1);
+        await this.randomDelay(1200, 3500);
+      } else {
+        // Cuon nhanh - dang tim kiem gi do
+        await this.page.mouse.wheel(0, 350 + Math.random() * 300);
+        await this.randomDelay(600, 1800);
+      }
+
+      // 40%: hover vao 1 pin
+      if (Math.random() > 0.6) {
+        const pins = await this.page.$$('[data-test-id="pin"]');
+        if (pins.length) {
+          const pin = pins[Math.floor(Math.random() * Math.min(pins.length, 8))];
           await pin.hover().catch(() => {});
-          await this.randomDelay(1200, 4000);
+          await this.randomDelay(700, 2500);
           await this._humanMouseMove();
         }
       }
 
-      if (Math.random() > 0.75) {
+      // 20%: click vao 1 pin de xem
+      if (Math.random() > 0.8) {
         await this._browseOnePinAndBack();
-        await this.randomDelay(2000, 5000);
+        await this.randomDelay(1500, 4000);
       }
     }
     logger.debug(this.platform, 'Warmup xong');
@@ -93,114 +123,155 @@ export class PinterestWorker extends BaseWorker {
     const pins = await this.page.$$('[data-test-id="pin"]');
     if (!pins.length) return;
     const pin = pins[Math.floor(Math.random() * Math.min(pins.length, 8))];
+    const vp = this.page.viewportSize() || { width: 1366, height: 768 };
     try {
       await pin.click();
-      await this.randomDelay(5000, 12000); // doc pin that su
-      await this.page.mouse.wheel(0, 100 + Math.random() * 300);
-      await this.randomDelay(2000, 5000);
+      await this.randomDelay(3500, 9000); // nhin anh lan dau
+
+      // Di chuot nhu dang nhin anh
+      await this.page.mouse.move(
+        80 + Math.random() * Math.min(380, vp.width / 2 - 60),
+        80 + Math.random() * (vp.height / 2),
+        { steps: 12 + Math.floor(Math.random() * 10) }
+      );
+      await this.randomDelay(1500, 4000);
+
+      if (Math.random() > 0.5) {
+        await this.page.mouse.wheel(0, 100 + Math.random() * 200);
+        await this.randomDelay(2000, 5000); // doc mo ta
+      }
+
       await this.page.keyboard.press('Escape');
-      await this.randomDelay(1000, 2500);
+      await this.randomDelay(700, 1800);
     } catch {}
   }
 
-  // Follow — xem profile truoc, cuon xem pin, roi moi follow
+  // ─── Follow: xem profile that su truoc roi moi follow ───────────────────────
+
   async _follow(profileUrl) {
     logger.debug(this.platform, `Navigate den profile: ${profileUrl}`);
     await this.page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
-    await this.randomDelay(3000, 6000);
+    await this.randomDelay(2000, 4500);
 
-    // Scroll to top de dam bao header + Follow button hien thi
+    // Dam bao ve dau trang
     await this.page.evaluate(() => window.scrollTo(0, 0));
-    await this.randomDelay(1000, 2000);
+    await this.randomDelay(500, 1000);
 
-    await this._humanMouseMove();
-    await this.randomDelay(2000, 5000); // nhin profile
-
-    // Cuon xuong xem pin (check xem co gi hay khong)
-    await this.naturalScroll(2);
-    await this.randomDelay(3000, 7000);
-
-    // Hover 1-2 pin truoc khi follow
-    const pins = await this.page.$$('[data-test-id="pin"]');
-    const previewCount = 1 + Math.floor(Math.random() * 2);
-    for (let i = 0; i < Math.min(previewCount, pins.length); i++) {
-      await pins[i].hover().catch(() => {});
-      await this.randomDelay(1500, 4000);
-      await this._humanMouseMove();
-    }
-
-    // Cuon nguoc len header bang JS (tuyet doi, khong phu thuoc vao scroll amount)
-    await this.page.evaluate(() => window.scrollTo(0, 0));
-    await this.randomDelay(1500, 3000);
-
-    // Tim nut Follow — ho tro ca tieng Anh va tieng Viet (Pinterest dung IP geo de xac dinh ngon ngu)
-    let followBtn = null;
-
-    // Tier 1: Playwright locator text matching
+    // Cho React render xong profile header
     try {
-      const loc = this.page.locator('button:has-text("Follow"), button:has-text("Theo d")').first();
-      if (await loc.count() > 0) followBtn = await loc.elementHandle();
+      await this.page.waitForFunction(
+        () => document.querySelectorAll('button').length > 2,
+        { timeout: 8000 }
+      );
     } catch {}
+    await this.randomDelay(500, 1200);
 
-    // Tier 2: CSS selectors + aria-label (ca EN va VI)
-    if (!followBtn) {
-      for (const sel of [
-        '[data-test-id="follow-button"]',
-        '[data-test-id="header-follow-button"]',
-        '[data-test-id="profile-follow-button"]',
-        'button[aria-label="Follow"]',
-        'button[aria-label*="Follow"]',
-        'button[aria-label="Theo doi"]',
-        'button[aria-label*="Theo doi"]',
-      ]) {
-        followBtn = await this.page.$(sel);
-        if (followBtn) break;
-      }
-    }
+    const vp = this.page.viewportSize() || { width: 1366, height: 768 };
 
-    // Tier 3: scan tat ca button — kiem tra ca tieng Viet "Theo doi"
-    if (!followBtn) {
-      const buttons = await this.page.$$('button');
-      for (const btn of buttons) {
-        const txt = await btn.innerText().catch(() => '');
-        const norm = txt.trim().normalize('NFD').toLowerCase()
-          .replace(/đ/g, 'd').replace(/[̀-ͯ]/g, '');
-        if (norm === 'follow' || norm === 'theo doi') {
-          followBtn = btn;
-          break;
-        }
-      }
-    }
+    // Nhin anh dai dien + ten (mouse di den vung header)
+    await this.page.mouse.move(
+      vp.width / 2 + (Math.random() - 0.5) * 200,
+      70 + Math.random() * 100,
+      { steps: 14 + Math.floor(Math.random() * 8) }
+    );
+    await this.randomDelay(2000, 5000); // "nhin" anh profile
 
-    if (!followBtn) {
-      // Debug: log ten tat ca buttons de phat hien van de
-      const allBtns = await this.page.$$('button');
-      const names = [];
-      for (const b of allBtns.slice(0, 25)) {
-        const t = await b.innerText().catch(() => '');
-        if (t.trim()) names.push(t.trim().slice(0, 20));
-      }
-      logger.debug(this.platform, `Buttons tren trang: ${names.join(' | ')}`);
-      throw new Error('Khong tim thay nut Follow');
-    }
+    // Di chuot sang vung stats (nguoi dung hay check follower count)
+    await this.page.mouse.move(
+      vp.width / 2 + (Math.random() - 0.5) * 160,
+      170 + Math.random() * 70,
+      { steps: 8 + Math.floor(Math.random() * 5) }
+    );
+    await this.randomDelay(1200, 3500); // doc so follower/following
 
-    const text = await followBtn.innerText().catch(() => '');
-    if (/following|dang theo|Đang theo/i.test(text)) {
+    // Cuon xuong xem pins truoc khi follow
+    await this._profileScroll();
+    await this.randomDelay(1500, 4000);
+
+    // Cuon nguoc ve top
+    await this.page.evaluate(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+    await this.randomDelay(400, 800);
+    await this.page.evaluate(() => window.scrollTo(0, 0));
+    await this.randomDelay(1200, 2500);
+
+    // Kiem tra da follow chua
+    if (await this._isAlreadyFollowing()) {
       logger.info(this.platform, `Da follow roi: ${profileUrl}`);
       return;
     }
 
-    // Di chuyen chuot tu nhien den nut — do du truoc khi click
-    await this._humanMouseMove();
-    await this.randomDelay(1000, 3000);
+    // Tim nut Follow (chay JS trong browser -- chinh xac nhat)
+    const followBtn = await this._findFollowButton();
+
+    if (!followBtn) {
+      const btnList = await this.page.evaluate(() => {
+        return Array.from(document.querySelectorAll('button'))
+          .map(b => (b.textContent || b.getAttribute('aria-label') || '').trim().slice(0, 25))
+          .filter(Boolean).slice(0, 20).join(' | ');
+      });
+      logger.info(this.platform, `[DEBUG] Buttons hien co: ${btnList}`);
+      throw new Error('Khong tim thay nut Follow');
+    }
+
+    // Nhin chỗ khac mot chut truoc khi click
+    await this.page.mouse.move(
+      vp.width / 2 + (Math.random() - 0.5) * 200,
+      vp.height / 2 + Math.random() * 100,
+      { steps: 10 }
+    );
+    await this.randomDelay(700, 2000);
+
     await followBtn.hover();
-    await this.randomDelay(800, 2500); // do du
+    await this.randomDelay(600, 1800); // do du tren nut
+
+    // 30% co them buoc do du (move ra roi quay lai)
+    if (Math.random() > 0.7) {
+      await this.page.mouse.move(
+        vp.width / 2 + (Math.random() - 0.5) * 80,
+        90 + Math.random() * 60,
+        { steps: 5 }
+      );
+      await this.randomDelay(400, 1000);
+      await followBtn.hover();
+      await this.randomDelay(300, 600);
+    }
+
     await followBtn.click();
     await this.randomDelay(2500, 5000);
     logger.info(this.platform, `Da follow: ${profileUrl}`);
   }
 
-  // Like — vao tung pin, xem that su roi moi like
+  // Cuon profile tu nhien + hover pin (dung chung cho follow)
+  async _profileScroll() {
+    const steps = 2 + Math.floor(Math.random() * 2);
+    const vp = this.page.viewportSize() || { width: 1366, height: 768 };
+    for (let i = 0; i < steps; i++) {
+      const speed = 200 + Math.random() * 350;
+      const chunks = 3 + Math.floor(Math.random() * 4);
+      for (let c = 0; c < chunks; c++) {
+        await this.page.mouse.wheel(0, speed / chunks);
+        await this.randomDelay(40, 130);
+      }
+      await this.randomDelay(1200, 4000);
+
+      if (Math.random() > 0.45) {
+        const pins = await this.page.$$('[data-test-id="pin"]');
+        if (pins.length) {
+          const pin = pins[Math.floor(Math.random() * Math.min(pins.length, 6))];
+          await pin.hover().catch(() => {});
+          await this.randomDelay(700, 2500);
+          await this.page.mouse.move(
+            100 + Math.random() * (vp.width - 200),
+            100 + Math.random() * (vp.height - 200),
+            { steps: 6 }
+          );
+        }
+      }
+    }
+  }
+
+  // ─── Like: vao tung pin xem that su roi like ────────────────────────────────
+
   async _likePins(profileUrl) {
     const likeCount = 2 + Math.floor(Math.random() * 3);
     const pinUrls = await this._collectPinUrls(profileUrl, likeCount + 3);
@@ -211,26 +282,48 @@ export class PinterestWorker extends BaseWorker {
       logger.debug(this.platform, `Xem pin: ${pinUrl}`);
 
       await this.page.goto(pinUrl, { waitUntil: 'domcontentloaded' });
-      await this.randomDelay(3500, 8000); // nhin pin sau khi load
+      await this.randomDelay(3000, 7000); // an tuong dau tien voi anh
 
-      // Di chuyen chuot nhu dang nhin anh
-      await this._humanMouseMove();
-      await this.randomDelay(2500, 7000); // doc title/description
+      const vp = this.page.viewportSize() || { width: 1366, height: 768 };
+      const imgX = 80 + Math.random() * Math.min(380, vp.width / 2 - 60);
 
-      // Cuon xuong xem mo ta va comment
-      await this.page.mouse.wheel(0, 150 + Math.random() * 250);
-      await this.randomDelay(2000, 6000);
+      // Nhin anh (mouse di chuyen theo hinh)
+      await this.page.mouse.move(
+        imgX,
+        80 + Math.random() * (vp.height / 2),
+        { steps: 14 + Math.floor(Math.random() * 10) }
+      );
+      await this.randomDelay(2000, 5500); // nhin anh
 
-      if (Math.random() > 0.4) {
-        await this.page.mouse.wheel(0, 80 + Math.random() * 120);
-        await this.randomDelay(1500, 4000);
+      // Di chuot theo phan khac cua anh
+      await this.page.mouse.move(
+        imgX + (Math.random() - 0.5) * 100,
+        100 + Math.random() * (vp.height / 2 - 80),
+        { steps: 6 + Math.floor(Math.random() * 6) }
+      );
+      await this.randomDelay(1000, 3500);
+
+      // Cuon xuong doc mo ta
+      await this.page.mouse.wheel(0, 100 + Math.random() * 160);
+      await this.randomDelay(2000, 5000); // doc mo ta / tags
+
+      // 55%: doc them comment hoac related pins
+      if (Math.random() > 0.45) {
+        await this.page.mouse.wheel(0, 80 + Math.random() * 140);
+        await this.randomDelay(1800, 5000); // doc comment
+        await this.page.mouse.move(
+          vp.width / 2 + 30 + Math.random() * 200,
+          180 + Math.random() * 200,
+          { steps: 7 }
+        );
+        await this.randomDelay(1200, 3500);
       }
 
-      // Cuon nguoc len de nhin pin va click like
-      await this.page.mouse.wheel(0, -(200 + Math.random() * 250));
-      await this.randomDelay(1500, 3500);
+      // Cuon nguoc len de thay nut like
+      await this.page.mouse.wheel(0, -(130 + Math.random() * 170));
+      await this.randomDelay(1200, 3000);
 
-      // Tim nut like/react (heart icon)
+      // Tim nut like
       let likeBtn = null;
       for (const sel of [
         '[data-test-id="react-button"]',
@@ -252,17 +345,35 @@ export class PinterestWorker extends BaseWorker {
       const pressed = await likeBtn.getAttribute('aria-pressed').catch(() => null);
       if (pressed === 'true') { logger.debug(this.platform, 'Pin da like roi'); continue; }
 
-      // Tu nhien: nhin chỗ khac truoc roi moi hover vao like
-      await this._humanMouseMove();
-      await this.randomDelay(1000, 3000);
+      // Nhin chỗ khac truoc (nhu dang doc gi do, chua chu y toi nut like)
+      await this.page.mouse.move(
+        vp.width / 2 + 40 + Math.random() * 160,
+        90 + Math.random() * 160,
+        { steps: 8 }
+      );
+      await this.randomDelay(500, 1800);
+
       await likeBtn.hover();
-      await this.randomDelay(700, 2000); // do du
+      await this.randomDelay(500, 1500); // do du tren nut
+
+      // 20%: do du them (move ra roi quay lai)
+      if (Math.random() > 0.8) {
+        await this.page.mouse.move(
+          vp.width / 2 + 70 + Math.random() * 60,
+          110 + Math.random() * 40,
+          { steps: 4 }
+        );
+        await this.randomDelay(300, 800);
+        await likeBtn.hover();
+        await this.randomDelay(200, 500);
+      }
+
       await likeBtn.click();
-      await this.randomDelay(2500, 5500);
+      await this.randomDelay(2000, 5000);
 
       successCount++;
       logger.info(this.platform, `Da like: ${pinUrl}`);
-      if (i < likeCount - 1) await this.randomDelay(8000, 18000); // nghi giua cac lan
+      if (i < likeCount - 1) await this.randomDelay(7000, 17000);
     }
     logger.info(this.platform, `Da like ${successCount} pin tu: ${profileUrl}`);
   }
@@ -271,14 +382,12 @@ export class PinterestWorker extends BaseWorker {
     const repinCount = Math.random() > 0.5 ? 2 : 1;
     const pinUrls = await this._collectPinUrls(targetUrl, repinCount + 2);
     let successCount = 0;
-
     for (let i = 0; i < Math.min(repinCount, pinUrls.length); i++) {
       await this.page.goto(pinUrls[i], { waitUntil: 'domcontentloaded' });
       await this.randomDelay(3000, 7000);
       await this._humanMouseMove();
       await this.page.mouse.wheel(0, 100 + Math.random() * 150);
       await this.randomDelay(2000, 5000);
-
       const saveBtn = await this.page.$('[data-test-id="save-button"]');
       if (!saveBtn) continue;
       await saveBtn.hover();
@@ -298,19 +407,16 @@ export class PinterestWorker extends BaseWorker {
     await this.randomDelay(3000, 7000);
     await this.page.mouse.wheel(0, 300 + Math.random() * 200);
     await this.randomDelay(1500, 3500);
-
-    const selectors = [
+    let commentField = null;
+    for (const sel of [
       '[data-test-id="comment-field"]',
       'textarea[placeholder*="comment" i]',
       'textarea[placeholder*="Add a comment" i]',
-    ];
-    let commentField = null;
-    for (const sel of selectors) {
+    ]) {
       commentField = await this.page.$(sel);
       if (commentField) break;
     }
     if (!commentField) throw new Error('Khong tim thay o comment');
-
     await commentField.hover();
     await this.randomDelay(600, 1500);
     await commentField.click();
@@ -321,6 +427,52 @@ export class PinterestWorker extends BaseWorker {
     await this.page.keyboard.press('Enter');
     await this.randomDelay(1500, 3500);
     logger.info(this.platform, `Da comment: "${text}"`);
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+  // Tim Follow button bang JS trong browser -- chay normalization Unicode chinh xac
+  async _findFollowButton() {
+    const handle = await this.page.evaluateHandle(() => {
+      function norm(s) {
+        return (s || '').normalize('NFD')
+          .replace(/[̀-ͯ]/g, '')
+          .replace(/đ/g, 'd')
+          .toLowerCase().trim();
+      }
+      for (const btn of document.querySelectorAll('button')) {
+        const txt  = norm(btn.textContent);
+        const aria = norm(btn.getAttribute('aria-label'));
+        if (txt === 'follow' || txt === 'theo doi' ||
+            aria === 'follow' || aria.startsWith('follow ') ||
+            aria === 'theo doi' || aria.startsWith('theo doi ')) {
+          return btn;
+        }
+      }
+      return null;
+    });
+    return handle.asElement();
+  }
+
+  // Kiem tra da follow chua (button text la "Following" hoac "Dang theo doi")
+  async _isAlreadyFollowing() {
+    return this.page.evaluate(() => {
+      function norm(s) {
+        return (s || '').normalize('NFD')
+          .replace(/[̀-ͯ]/g, '')
+          .replace(/đ/g, 'd')
+          .toLowerCase().trim();
+      }
+      for (const btn of document.querySelectorAll('button')) {
+        const txt  = norm(btn.textContent);
+        const aria = norm(btn.getAttribute('aria-label'));
+        if (txt === 'following' || txt.startsWith('dang theo') ||
+            aria === 'following' || aria.startsWith('dang theo')) {
+          return true;
+        }
+      }
+      return false;
+    });
   }
 
   async _resolvePinUrl(targetUrl) {
