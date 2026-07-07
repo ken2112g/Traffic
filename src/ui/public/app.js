@@ -1,4 +1,4 @@
-
+﻿
 /* === Constants === */
 const PLATFORMS = ['pinterest','instagram','tiktok','youtube','twitter','facebook'];
 const PLATFORM_ACTIONS = {
@@ -95,13 +95,22 @@ function closeDrawer() {
   document.getElementById('drawer').classList.remove('open');
 }
 
+const DEFAULT_CHECKED_ACTIONS = ['like', 'follow'];
 window.updateActionCheckboxes = function(platform) {
   const box = document.getElementById('action-boxes');
+  const hint = document.getElementById('action-random-hint');
   const actions = PLATFORM_ACTIONS[platform] || [];
-  if (!actions.length) { box.innerHTML = '<span style="font-size:12px;color:var(--muted)">Chọn nền tảng trước</span>'; return; }
+  if (!actions.length) {
+    box.innerHTML = '<span style="font-size:12px;color:var(--muted)">Chọn nền tảng trước</span>';
+    if (hint) hint.style.display = 'none';
+    return;
+  }
   box.innerHTML = actions.map(a =>
-    '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="checkbox" name="actions" value="' + esc(a) + '" style="accent-color:var(--accent)"> ' + esc(a) + '</label>'
+    '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="checkbox" name="actions" value="' + esc(a) + '"' +
+    (DEFAULT_CHECKED_ACTIONS.includes(a) ? ' checked' : '') +
+    ' style="accent-color:var(--accent)"> ' + esc(a) + '</label>'
   ).join('');
+  if (hint) hint.style.display = actions.some(a => a === 'repin' || a === 'comment') ? 'block' : 'none';
 };
 
 function buildTargetUrl(platform, username) {
