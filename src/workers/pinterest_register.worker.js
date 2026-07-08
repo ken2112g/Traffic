@@ -1,4 +1,4 @@
-﻿import { chromium } from 'playwright-extra';
+import { chromium } from 'playwright-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import path from 'path';
 import { TempMail } from '../utils/tempmail.js';
