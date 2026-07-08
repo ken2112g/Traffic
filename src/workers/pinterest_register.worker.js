@@ -1,6 +1,5 @@
-import { chromium } from 'playwright-extra';
+﻿import { chromium } from 'playwright-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import readline from 'readline';
 import path from 'path';
 import { TempMail } from '../utils/tempmail.js';
 import { accountManager } from '../core/accountManager.js';
@@ -29,11 +28,14 @@ function randPassword() {
   return 'Tr@' + Math.random().toString(36).slice(2, 8) + Math.floor(Math.random() * 900 + 100);
 }
 
-async function waitEnter(msg) {
-  return new Promise(resolve => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.question(msg, () => { rl.close(); resolve(); });
-  });
+async function waitForManualStep(page, { timeoutMs = 5 * 60_000, intervalMs = 3000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const url = page.url();
+    if (!url.includes('register') && !url.includes('signup')) return true;
+    await page.waitForTimeout(intervalMs);
+  }
+  return false;
 }
 
 async function fillIfExists(page, selector, value) {
@@ -105,14 +107,12 @@ export async function registerPinterestAccount({ role = 'sub', proxyConfig = nul
     const stillOnRegister = page.url().includes('register') || page.url().includes('signup');
 
     if (hasCaptcha || stillOnRegister) {
-      console.log('\n' + '='.repeat(55));
-      console.log('  [THU CONG] CAPTCHA XUAT HIEN!');
-      console.log(`  Email dang dung: ${email}`);
-      console.log('  Hay giai CAPTCHA trong cua so trinh duyet,');
-      console.log('  sau do click "Continue" / "Sign up".');
-      console.log('  Khi da qua trang tiep theo, nhan Enter o day.');
-      console.log('='.repeat(55) + '\n');
-      await waitEnter('  Nhan Enter de tiep tuc sau khi giai CAPTCHA: ');
+      logger.warn('Register', `CAPTCHA/buoc thu cong cho ${email} — cho toi da 5 phut de giai tren cua so trinh duyet...`);
+      const solved = await waitForManualStep(page);
+      if (!solved) {
+        throw new Error('Timeout cho buoc thu cong (CAPTCHA) khi dang ky: ' + email);
+      }
+      logger.info('Register', `Da qua buoc thu cong cho ${email}, tiep tuc...`);
       await page.waitForTimeout(2000);
     }
 
@@ -139,8 +139,7 @@ export async function registerPinterestAccount({ role = 'sub', proxyConfig = nul
       await page.waitForTimeout(3000);
       console.log('  [OK] Email da xac nhan!');
     } else {
-      console.log('  [WARN] Khong tim duoc link verify - co the Pinterest khong yeu cau, hoac kiem tra thu cong.');
-      await waitEnter('  Nhan Enter khi ban da xu ly xong: ');
+      logger.warn('Register', `Khong tim duoc link verify cho ${email} - luu account nhung chua xac nhan email.`);
     }
 
     // ── 10. Luu session va DB ─────────────────────────────────────────
@@ -162,4 +161,24 @@ export async function registerPinterestAccount({ role = 'sub', proxyConfig = nul
     await context.close();
     await browser.close();
   }
+}
+
+export async function registerAccountsBatch({ count, role = 'sub' } = {}) {
+  let success = 0;
+  for (let i = 0; i < count; i++) {
+    logger.info('Register', `--- Account ${i + 1}/${count} ---`);
+    try {
+      await registerPinterestAccount({ role });
+      success++;
+    } catch (e) {
+      logger.error('Register', `Loi dang ky account ${i + 1}/${count}: ${e.message}`);
+    }
+    if (i < count - 1) {
+      const wait = 30_000 + Math.floor(Math.random() * 30_000);
+      logger.info('Register', `Nghi ${Math.round(wait / 1000)}s truoc account tiep theo...`);
+      await new Promise(r => setTimeout(r, wait));
+    }
+  }
+  logger.info('Register', `Hoan tat batch: ${success}/${count} account thanh cong`);
+  return { success, total: count };
 }
