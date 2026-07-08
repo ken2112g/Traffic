@@ -444,24 +444,10 @@ const commands = {
       process.exit(1);
     }
 
-    const { registerPinterestAccount } = await import('../src/workers/pinterest_register.worker.js');
+    const { registerAccountsBatch } = await import('../src/workers/pinterest_register.worker.js');
 
     console.log(chalk.bold(`\nDang ky ${count} account Pinterest (thu cong CAPTCHA)...\n`));
-    let success = 0;
-    for (let i = 0; i < count; i++) {
-      console.log(chalk.bold.cyan(`\n--- Account ${i + 1} / ${count} ---`));
-      try {
-        await registerPinterestAccount({ role });
-        success++;
-        if (i < count - 1) {
-          const wait = 30_000 + Math.floor(Math.random() * 30_000);
-          console.log(chalk.gray(`  Nghi ${Math.round(wait / 1000)}s truoc account tiep theo...`));
-          await new Promise(r => setTimeout(r, wait));
-        }
-      } catch (e) {
-        console.error(chalk.red(`  [LOI] ${e.message}`));
-      }
-    }
+    const { success } = await registerAccountsBatch({ count, role });
     console.log(chalk.bold.green(`\nXong: ${success}/${count} account da tao thanh cong.`));
   },
   // ── stats ──────────────────────────────────────────────────────────────────
