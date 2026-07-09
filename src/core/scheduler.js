@@ -162,18 +162,14 @@ export class Scheduler {
     const actions   = JSON.parse(campaign.actions);
     const targetUrl = campaign.target_url || buildTargetUrl(platform, campaign.target_account);
 
-    const accounts = this.db.prepare(`
-      SELECT a.* FROM accounts a
-      INNER JOIN campaign_accounts ca ON ca.account_id = a.id
-      WHERE ca.campaign_id = ? AND a.status NOT IN ('banned', 'error')
-    `).all(campaignId);
+    const accounts = this._resolveCampaignAccounts(campaign, ['banned', 'error']);
 
     let totalScheduled = 0;
 
     for (const account of accounts) {
       const already = this.db.prepare(`
         SELECT COUNT(*) as c FROM tasks
-        WHERE account_id=? AND campaign_id=? AND DATE(scheduled_at)=? AND status='pending'
+        WHERE account_id=? AND campaign_id=? AND DATE(scheduled_at)=?
       `).get(account.id, campaignId, today);
       if (already.c > 0) continue;
 
@@ -240,16 +236,19 @@ export class Scheduler {
     const campaign = this.db.prepare('SELECT * FROM campaigns WHERE id=?').get(campaignId);
     if (!campaign) throw new Error(`Campaign ${campaignId} not found`);
 
+    const today     = new Date().toISOString().slice(0, 10);
     const actions   = JSON.parse(campaign.actions);
     const targetUrl = campaign.target_url || buildTargetUrl(campaign.platform, campaign.target_account);
-    const accounts  = this.db.prepare(`
-      SELECT a.* FROM accounts a
-      INNER JOIN campaign_accounts ca ON ca.account_id=a.id
-      WHERE ca.campaign_id=? AND a.status!='banned'
-    `).all(campaignId);
+    const accounts  = this._resolveCampaignAccounts(campaign, ['banned']);
 
     let count = 0;
     for (const account of accounts) {
+      const already = this.db.prepare(`
+        SELECT COUNT(*) as c FROM tasks
+        WHERE account_id=? AND campaign_id=? AND DATE(scheduled_at)=?
+      `).get(account.id, campaignId, today);
+      if (already.c > 0) continue;
+
       for (const action of actions) {
         // follow luon dung profile URL
         const actionUrl = action === 'follow'
@@ -266,6 +265,24 @@ export class Scheduler {
     }
     logger.info('Scheduler', `triggerNow: enqueued ${count} tasks for campaign "${campaign.name}"`);
     return count;
+  }
+
+  // ─── Resolve accounts cho 1 campaign (theo account_scope) ──────────────────
+  // account_scope='all': luôn lấy toàn bộ account platform/sub hiện có (bao gồm account mới thêm sau)
+  // account_scope='selected': dùng danh sách cố định trong campaign_accounts
+  _resolveCampaignAccounts(campaign, excludeStatuses) {
+    const placeholders = excludeStatuses.map(() => '?').join(',');
+    if (campaign.account_scope === 'all') {
+      return this.db.prepare(`
+        SELECT * FROM accounts
+        WHERE platform=? AND role='sub' AND status NOT IN (${placeholders})
+      `).all(campaign.platform, ...excludeStatuses);
+    }
+    return this.db.prepare(`
+      SELECT a.* FROM accounts a
+      INNER JOIN campaign_accounts ca ON ca.account_id = a.id
+      WHERE ca.campaign_id = ? AND a.status NOT IN (${placeholders})
+    `).all(campaign.id, ...excludeStatuses);
   }
 
   // ─── Campaign management ─────────────────────────────────────────────────────
