@@ -218,9 +218,10 @@ app.post('/api/campaigns', (req, res) => {
     const { name, platform, target_account, target_url, actions, schedule, account_ids } = req.body;
     if (!name || !platform || !target_account || !actions?.length) return res.status(400).json({ error: 'required fields missing' });
     const db = getDb(); const id = randomUUID();
-    db.prepare('INSERT INTO campaigns(id,name,platform,target_account,target_url,actions,schedule) VALUES(?,?,?,?,?,?,?)')
-      .run(id, name, platform, target_account, target_url || null, JSON.stringify(actions), schedule || 'auto');
-    if (!account_ids || account_ids === 'all') {
+    const accountScope = (!account_ids || account_ids === 'all') ? 'all' : 'selected';
+    db.prepare('INSERT INTO campaigns(id,name,platform,target_account,target_url,actions,schedule,account_scope) VALUES(?,?,?,?,?,?,?,?)')
+      .run(id, name, platform, target_account, target_url || null, JSON.stringify(actions), schedule || 'auto', accountScope);
+    if (accountScope === 'all') {
       const accs = db.prepare("SELECT id FROM accounts WHERE platform=? AND role='sub' AND status!='banned'").all(platform);
       const ins  = db.prepare('INSERT OR IGNORE INTO campaign_accounts(campaign_id,account_id) VALUES(?,?)');
       accs.forEach(a => ins.run(id, a.id));
@@ -307,13 +308,13 @@ app.get('/api/tasks', (req, res) => {
     // Tìm theo ID cụ thể (cho task detail)
     if (id) {
       const task = db.prepare(`
-        SELECT t.*,a.username as account_username,c.name as campaign_name
+        SELECT t.*,a.username as account_username,c.name as campaign_name,c.target_account as campaign_target
         FROM tasks t LEFT JOIN accounts a ON a.id=t.account_id LEFT JOIN campaigns c ON c.id=t.campaign_id
         WHERE t.id=?
       `).get(id);
       return res.json(task ? [task] : []);
     }
-    let sql = `SELECT t.*,a.username as account_username,c.name as campaign_name
+    let sql = `SELECT t.*,a.username as account_username,c.name as campaign_name,c.target_account as campaign_target
                FROM tasks t LEFT JOIN accounts a ON a.id=t.account_id LEFT JOIN campaigns c ON c.id=t.campaign_id`;
     const w = [], pr = [];
     if (status      && status      !== 'all') { w.push('t.status=?');      pr.push(status);      }
