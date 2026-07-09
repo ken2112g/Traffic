@@ -116,4 +116,11 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_tasks_scheduled    ON tasks(scheduled_at);
     CREATE INDEX IF NOT EXISTS idx_logs_created       ON logs(created_at);
   `);
+
+  // Migration: account_scope thêm sau — 'all' = tự động gồm account mới, 'selected' = danh sách cố định
+  try {
+    db.exec("ALTER TABLE campaigns ADD COLUMN account_scope TEXT DEFAULT 'all'");
+  } catch (err) {
+    if (!/duplicate column name/i.test(err.message)) throw err;
+  }
 }
