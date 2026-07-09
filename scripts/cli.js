@@ -150,6 +150,7 @@ const commands = {
 
     // Resolve accounts
     let accountIds = [];
+    const accountScope = (!flags.accounts || flags.accounts === 'all') ? 'all' : 'selected';
     if (flags.accounts === 'all') {
       accountIds = accountManager.getSubAccounts(platform).map(a => a.id);
       if (accountIds.length === 0) { warn('Không có account sub nào cho platform này'); }
@@ -160,9 +161,9 @@ const commands = {
     const db = getDb();
     const id = randomUUID();
     db.prepare(`
-      INSERT INTO campaigns (id, name, platform, target_account, target_url, actions, schedule)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, name, platform, target, url, JSON.stringify(actions), schedule);
+      INSERT INTO campaigns (id, name, platform, target_account, target_url, actions, schedule, account_scope)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, name, platform, target, url, JSON.stringify(actions), schedule, accountScope);
 
     if (accountIds.length > 0) {
       const insert = db.prepare('INSERT OR IGNORE INTO campaign_accounts (campaign_id, account_id) VALUES (?, ?)');
@@ -305,8 +306,8 @@ const commands = {
     if (!src) { err(`Campaign không tồn tại: ${id}`); process.exit(1); }
     const newId   = randomUUID();
     const newName = flags.name || (src.name + ' (Copy)');
-    db.prepare('INSERT INTO campaigns(id,name,platform,target_account,target_url,actions,schedule,is_active) VALUES(?,?,?,?,?,?,?,1)')
-      .run(newId, newName, src.platform, src.target_account, src.target_url, src.actions, src.schedule);
+    db.prepare('INSERT INTO campaigns(id,name,platform,target_account,target_url,actions,schedule,account_scope,is_active) VALUES(?,?,?,?,?,?,?,?,1)')
+      .run(newId, newName, src.platform, src.target_account, src.target_url, src.actions, src.schedule, src.account_scope);
     const accs = db.prepare('SELECT account_id FROM campaign_accounts WHERE campaign_id=?').all(id);
     const ins  = db.prepare('INSERT OR IGNORE INTO campaign_accounts(campaign_id,account_id) VALUES(?,?)');
     accs.forEach(a => ins.run(newId, a.account_id));

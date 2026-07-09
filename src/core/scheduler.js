@@ -289,10 +289,11 @@ export class Scheduler {
 
   createCampaign({ name, platform, targetAccount, targetUrl, actions, schedule = 'auto', accountIds = [] }) {
     const id = randomUUID();
+    const accountScope = accountIds.length > 0 ? 'selected' : 'all';
     this.db.prepare(`
-      INSERT INTO campaigns (id, name, platform, target_account, target_url, actions, schedule)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, name, platform, targetAccount, targetUrl || null, JSON.stringify(actions), schedule);
+      INSERT INTO campaigns (id, name, platform, target_account, target_url, actions, schedule, account_scope)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, name, platform, targetAccount, targetUrl || null, JSON.stringify(actions), schedule, accountScope);
 
     if (accountIds.length > 0) {
       const ins = this.db.prepare('INSERT OR IGNORE INTO campaign_accounts (campaign_id, account_id) VALUES (?, ?)');
