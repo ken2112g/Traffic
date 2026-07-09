@@ -492,8 +492,8 @@ app.post('/api/campaigns/:id/clone', async (req, res) => {
     const { randomUUID } = await import('crypto');
     const newId   = randomUUID();
     const newName = (req.body?.name || src.name + ' (Copy)');
-    db.prepare('INSERT INTO campaigns(id,name,platform,target_account,target_url,actions,schedule,is_active) VALUES(?,?,?,?,?,?,?,1)')
-      .run(newId, newName, src.platform, src.target_account, src.target_url, src.actions, src.schedule);
+    db.prepare('INSERT INTO campaigns(id,name,platform,target_account,target_url,actions,schedule,account_scope,is_active) VALUES(?,?,?,?,?,?,?,?,1)')
+      .run(newId, newName, src.platform, src.target_account, src.target_url, src.actions, src.schedule, src.account_scope);
     // Copy accounts
     const accs = db.prepare('SELECT account_id FROM campaign_accounts WHERE campaign_id=?').all(req.params.id);
     const ins  = db.prepare('INSERT OR IGNORE INTO campaign_accounts(campaign_id,account_id) VALUES(?,?)');
