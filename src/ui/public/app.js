@@ -199,6 +199,7 @@ window.submitCampaign = async function(e) {
 /* Router */
 function navigate(view) {
   if (monitorInterval && view !== 'monitor') { clearInterval(monitorInterval); monitorInterval = null; }
+  if (platformTaskLiveInterval && view !== currentView) { clearInterval(platformTaskLiveInterval); platformTaskLiveInterval = null; }
   currentView = view;
   document.querySelectorAll('.nav-item[data-view]').forEach(el =>
     el.classList.toggle('active', el.dataset.view === view));
@@ -293,6 +294,7 @@ async function renderPlatform(platform, el) {
 }
 
 window.setPlatformTab = async function(platform, tab) {
+  if (platformTaskLiveInterval && tab !== 'tasks') { clearInterval(platformTaskLiveInterval); platformTaskLiveInterval = null; }
   platformTab[platform] = tab;
   document.querySelectorAll('.ptab').forEach((btn, i) => {
     const k = Object.keys(PTAB_LABELS)[i];
@@ -462,22 +464,49 @@ async function renderPlatformCampaigns(platform, el) {
 
 /* Tasks tab */
 async function renderPlatformTasks(platform, el) {
+  const campaigns = await api('GET', '/campaigns?platform=' + platform).catch(() => []);
+  const campaignOpts = campaigns.map(c =>
+    '<option value="' + c.id + '">' + esc(c.name) + ' &rarr; @' + esc(c.target_account) + '</option>'
+  ).join('');
   el.innerHTML =
+    '<div id="ptask-live" style="margin-bottom:10px"></div>' +
     '<div class="filter-bar" style="margin-bottom:16px">' +
     `<select id="ptask-status" onchange="reloadPlatformTasks('${platform}')">` +
     '<option value="all">Tất cả</option><option value="done">Done</option><option value="failed">Thất bại</option><option value="pending">Dang cho</option><option value="running">Đang chạy</option>' +
     '</select>' +
+    `<select id="ptask-campaign" onchange="reloadPlatformTasks('${platform}')">` +
+    '<option value="">Tất cả chiến dịch</option>' + campaignOpts +
+    '</select>' +
     `<button class="btn btn--secondary btn--sm" onclick="reloadPlatformTasks('${platform}')">Refresh</button>` +
     '</div><div id="ptasks-wrap"><div class="skeleton" style="height:200px;border-radius:8px"></div></div>';
   await reloadPlatformTasks(platform);
+  if (platformTaskLiveInterval) clearInterval(platformTaskLiveInterval);
+  refreshPlatformTaskLive(platform);
+  platformTaskLiveInterval = setInterval(function() { refreshPlatformTaskLive(platform); }, 4000);
 }
 
+window.refreshPlatformTaskLive = async function(platform) {
+  const el = document.getElementById('ptask-live');
+  if (!el) return;
+  try {
+    const running = await api('GET', '/tasks?platform=' + platform + '&status=running&limit=50');
+    const count = running.length;
+    el.innerHTML = '<div class="monitor-card"><div class="monitor-card-title">' +
+      '<span class="monitor-dot' + (count ? '' : '-off') + '"></span>' +
+      (count ? count + ' tác vụ đang chạy' : 'Đang rảnh — không có tác vụ nào') +
+      '</div></div>';
+  } catch {}
+};
+
 window.reloadPlatformTasks = async function(platform) {
-  const status = document.getElementById('ptask-status')?.value || 'all';
+  const status     = document.getElementById('ptask-status')?.value || 'all';
+  const campaignId = document.getElementById('ptask-campaign')?.value || '';
   const wrap = document.getElementById('ptasks-wrap');
   if (!wrap) return;
   try {
-    const tasks = await api('GET', '/tasks?platform=' + platform + '&status=' + status + '&limit=100');
+    let url = '/tasks?platform=' + platform + '&status=' + status + '&limit=100';
+    if (campaignId) url += '&campaign_id=' + campaignId;
+    const tasks = await api('GET', url);
     if (!tasks.length) { wrap.innerHTML = '<div class="empty-state"><h3>Chưa có tac vu</h3></div>'; return; }
     const rows = tasks.map(t => {
       const hasErr = t.status==='failed' && t.error;
@@ -486,16 +515,18 @@ window.reloadPlatformTasks = async function(platform) {
       '<td><span class="action-pill">' + esc(t.action) + '</span></td>' +
       '<td>' + badge(t.status) + '</td>' +
       '<td class="td-sm">' + esc(t.campaign_name||'---') + '</td>' +
+      '<td class="td-mono td-sm">' + (t.campaign_target ? '@'+esc(t.campaign_target) : '---') + '</td>' +
       '<td class="td-sm">' + fmt(t.finished_at) + '</td>' +
       '<td class="col-actions">' + (t.status==='failed' ? `<button class="btn btn--xs btn--secondary" onclick="event.stopPropagation();retryTask('${t.id}')">Thử lại</button>` : '') + '</td></tr>';
     }).join('');
-    wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Tài khoản</th><th>Hành động</th><th>Trạng thái</th><th>Chiến dịch</th><th>Hoàn thành lúc</th><th>Thử lại</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Tài khoản</th><th>Hành động</th><th>Trạng thái</th><th>Chiến dịch</th><th>Đích</th><th>Hoàn thành lúc</th><th>Thử lại</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
   } catch (err) { wrap.innerHTML = '<div class="error-text">' + esc(err.message) + '</div>'; }
 };
 
 
 ﻿/* Monitor state */
 let monitorInterval = null;
+let platformTaskLiveInterval = null;
 
 /* Elapsed time helper */
 function elapsed(dtStr) {
